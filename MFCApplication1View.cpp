@@ -22,6 +22,27 @@
 #endif
 
 
+COLORREF colors[] = {
+	RGB(0, 0, 0)	// Black
+	RGB(255, 0, 0),   // Red
+	RGB(0, 255, 0),   // Green
+	RGB(0, 0, 255),   // Blue
+};
+
+size_t NumColors = sizeof(colors) / sizeof(colors[0]);
+static std::map < CString, int> g_dict;
+
+COLORREF GetColorByType(CString const& type)
+{
+	auto it = g_dict.find(type);
+	if (it != g_dict.end())
+	{
+		return colors[it->second];
+	}
+	int index = g_dict.size() % NumColors;
+	g_dict[type] = index;
+	return colors[index];
+}
 // CMFCApplication1View
 
 IMPLEMENT_DYNCREATE(CMFCApplication1View, CView)
@@ -196,15 +217,21 @@ public:
 		// Ins
 		for (const auto& port : ins_)
 		{
+			CPen pen(PS_SOLID, 1, GetColorByType(port.type));
+			auto old = pDC->SelectObject(pen);
 			pDC->Rectangle(port.rc);
 			pDC->TextOutA(port.rc.right, port.rc.top, port.name + ":" + port.type);
+			pDC->SelectObject(old);
 		}
 
 		// Outs
 		for (const auto& port : outs_)
 		{
+			CPen pen(PS_SOLID, 1, GetColorByType(port.type));
+			auto old = pDC->SelectObject(pen);
 			pDC->Rectangle(port.rc);
 			pDC->TextOutA(port.rc.right, port.rc.top, port.name + ":" + port.type);
+			pDC->SelectObject(old);
 		}
 	}
 
@@ -298,26 +325,6 @@ public:
 	}
 };
 
-COLORREF colors[] = {
-	RGB(255, 0, 0),   // Red
-	RGB(0, 255, 0),   // Green
-	RGB(0, 0, 255),   // Blue
-	RGB(255, 255, 0)  // Yellow
-};
-size_t NumColors = sizeof(colors) / sizeof(colors[0]);
-static std::map < CString, int> g_dict;
-
-COLORREF GetColorByType(CString const& type)
-{
-	auto it = g_dict.find(type);
-	if (it!= g_dict.end())
-	{
-		return colors[it->second];
-	}
-	int index = g_dict.size() % NumColors;
-	g_dict[type] = index;
-	return colors[index];
-}
 
 void Line(CDC* pDC, CString const& type, CPoint const& pt1, CPoint const& pt2, double ratio)
 {

@@ -1,0 +1,384 @@
+﻿
+// MFCApplication1View.cpp: CMFCApplication1View 类的实现
+//
+
+#include "pch.h"
+#include "framework.h"
+// SHARED_HANDLERS 可以在实现预览、缩略图和搜索筛选器句柄的
+// ATL 项目中进行定义，并允许与该项目共享文档代码。
+#ifndef SHARED_HANDLERS
+#include "MFCApplication1.h"
+#endif
+
+#include "MFCApplication1Doc.h"
+#include "MFCApplication1View.h"
+#include <vector>
+#include <optional>
+
+#ifdef _DEBUG
+#define new DEBUG_NEW
+#endif
+
+
+// CMFCApplication1View
+
+IMPLEMENT_DYNCREATE(CMFCApplication1View, CView)
+
+BEGIN_MESSAGE_MAP(CMFCApplication1View, CView)
+	// 标准打印命令
+	ON_COMMAND(ID_FILE_PRINT, &CView::OnFilePrint)
+	ON_COMMAND(ID_FILE_PRINT_DIRECT, &CView::OnFilePrint)
+	ON_COMMAND(ID_FILE_PRINT_PREVIEW, &CView::OnFilePrintPreview)
+	ON_WM_LBUTTONDOWN()
+END_MESSAGE_MAP()
+
+// CMFCApplication1View 构造/析构
+
+CMFCApplication1View::CMFCApplication1View() noexcept
+{
+	// TODO: 在此处添加构造代码
+
+}
+
+CMFCApplication1View::~CMFCApplication1View()
+{
+}
+
+BOOL CMFCApplication1View::PreCreateWindow(CREATESTRUCT& cs)
+{
+	// TODO: 在此处通过修改
+	//  CREATESTRUCT cs 来修改窗口类或样式
+
+	return CView::PreCreateWindow(cs);
+}
+
+// CMFCApplication1View 绘图
+std::vector<CRect> GetPortRects(int x, int top, int btm, int num)
+{
+	std::vector<CRect> ret;
+	for (size_t i = 0; i < num; i++)
+	{
+		double pitch = 1.0 * (btm-top) / (num + 1);
+		double portSize = pitch / 4;
+		double centerX = x;
+		double centerY = top + pitch + i * pitch;
+		ret.emplace_back(centerX - portSize, centerY - portSize, centerX + portSize, centerY + portSize);
+	}
+	return ret;
+}
+
+struct Block
+{
+	CRect rc_;
+	CString title_;
+	size_t numIns_;
+	size_t numOuts_;
+public:
+	Block():numIns_(0), numOuts_(0){}
+
+	void Draw(CDC* pDC) const
+	{
+		pDC->Rectangle(rc_);
+		pDC->TextOut(rc_.left+5, rc_.top+5, title_);
+
+		//for (size_t i = 0; i < numIns_; i++)
+		//{
+		//	double pitch = 1.0 * rc_.Height() / (numIns_ + 1);
+		//	double portSize = pitch / 4;
+		//	double centerX = rc_.left;
+		//	double centerY= rc_.top + pitch + i * pitch;
+		//	pDC->Rectangle(centerX - portSize, centerY - portSize, centerX + portSize, centerY + portSize);
+		//}
+
+		for (const auto& rc : GetPortRects(rc_.left, rc_.top, rc_.bottom, numIns_))
+		{
+			pDC->Rectangle(rc);
+		}
+		for (const auto& rc : GetPortRects(rc_.right, rc_.top, rc_.bottom, numOuts_))
+		{
+			pDC->Rectangle(rc);
+		}
+	}
+
+	std::vector<CRect> GetInPortRects() const
+	{
+		return GetPortRects(rc_.left, rc_.top, rc_.bottom, numIns_);
+	}
+	std::vector<CRect> GetOutPortRects() const
+	{
+		return GetPortRects(rc_.right, rc_.top, rc_.bottom, numOuts_);
+	}
+
+	CPoint GetInPortCenter(size_t i) const
+	{
+		auto rects = GetPortRects(rc_.left, rc_.top, rc_.bottom, numIns_);
+		return rects[i].CenterPoint();
+	}
+
+	CPoint GetOutPortCenter(size_t i) const
+	{
+		auto rects = GetPortRects(rc_.right, rc_.top, rc_.bottom, numOuts_);
+		return rects[i].CenterPoint();
+	}
+};
+
+void Line(CDC* pDC, CPoint const& pt1, CPoint const& pt2, double ratio)
+{
+	double x = (pt2.x - pt1.x) * ratio + pt1.x;
+	
+	pDC->MoveTo(pt1);
+	pDC->LineTo(CPoint(x, pt1.y));
+	pDC->LineTo(CPoint(x, pt2.y));
+	pDC->LineTo(pt2);
+}
+
+template <typename T, size_t N>
+class CircularQueue {
+public:
+	CircularQueue() : front_(0), rear_(0), size_(0) {}
+
+	bool enqueue(const T& value) {
+		if (isFull()) {
+			return false;
+		}
+
+		rear_ = (rear_ + 1) % N;
+		data_[rear_] = value;
+		size_++;
+		return true;
+	}
+
+	bool dequeue(T& value) {
+		if (isEmpty()) {
+			return false;
+		}
+
+		value = data_[front_];
+		front_ = (front_ + 1) % N;
+		size_--;
+		return true;
+	}
+
+	bool isEmpty() const {
+		return size_ == 0;
+	}
+
+	bool isFull() const {
+		return size_ == N;
+	}
+
+	size_t size() const {
+		return size_;
+	}
+
+	template <class F>
+	void ForEach(F f) const
+	{
+
+	}
+private:
+	T data_[N];
+	size_t front_;
+	size_t rear_;
+	size_t size_;
+};
+
+
+struct Test
+{
+	std::vector<Block> blocks;
+
+	struct Connection
+	{
+		int srcBlockIdx=0;
+		int srcBlockPortIdx = 0;
+
+		int dstBlockIdx = 0;
+		int dstBlockPortIdx = 0;
+	};
+	std::vector<Connection> conns_;
+
+	struct HitTestResult
+	{
+		int blockIdx_ = -1;
+		enum Type { NA, Block, InPort, OutPort } type_ = NA;
+		int portIndx_ = -1;
+	};
+
+	CircularQueue< HitTestResult, 2> selected_;
+
+	Test()
+	{
+		for (int i = 0; i < 2; i++)
+		{
+			Block block1;
+			int x = 100 + 300 * i, y = 100 + 300 * i;
+			block1.rc_ = CRect(x, y, x+200, y+200);
+			block1.title_.Format("block%d", i);
+			block1.numIns_ = 3;
+			block1.numOuts_ = 4;
+			blocks.push_back(block1);
+		}
+
+		for (int i = 0; i < 3; i++)
+			conns_.emplace_back(Connection{ 0,i,1,i });
+	}
+
+	void Draw(CDC* pDC)
+	{
+		for (const auto& b:blocks)
+		{
+			b.Draw(pDC);
+		}
+		
+		for (int i=0; i<conns_.size(); i++)
+		{
+			const auto& conn = conns_[i];
+			auto pt1 = blocks[conn.srcBlockIdx].GetOutPortCenter(conn.srcBlockPortIdx);
+			auto pt2 = blocks[conn.dstBlockIdx].GetInPortCenter(conn.dstBlockPortIdx);
+			//pDC->MoveTo(pt1);
+			//pDC->LineTo(pt2);
+
+			double pitch = 0.5 / conns_.size();
+			Line(pDC, pt1, pt2, 0.5 + pitch * (-i + conns_.size() *0.5));
+		}
+	}
+
+
+
+	HitTestResult HitTest(CPoint pt) const
+	{
+		for (int i=0; i<blocks.size(); i++)
+		{
+			const auto& b = blocks[i];
+
+			{
+				auto ins = b.GetInPortRects();
+				for (int j = 0; j < ins.size(); j++)
+				{
+					const auto& rc = ins[j];
+					CRectTracker tracker(rc, CRectTracker::dottedLine | CRectTracker::resizeInside);
+					int hitTest = tracker.HitTest(pt);
+					if (hitTest >= 0)
+					{
+						return HitTestResult{ i, HitTestResult::Type::InPort, j };
+					}
+				}
+			}
+
+			{
+				auto outs = b.GetOutPortRects();
+				for (int j = 0; j < outs.size(); j++)
+				{
+					const auto& rc = outs[j];
+					CRectTracker tracker(rc, CRectTracker::dottedLine | CRectTracker::resizeInside);
+					int hitTest = tracker.HitTest(pt);
+					if (hitTest >= 0)
+					{
+						return HitTestResult{ i, HitTestResult::Type::OutPort, j };
+					}
+				}
+			}
+
+			{
+				CRectTracker tracker(b.rc_, CRectTracker::dottedLine | CRectTracker::resizeInside);
+				int hitTest = tracker.HitTest(pt);
+				if (hitTest >= 0)
+				{
+					return HitTestResult{ i, HitTestResult::Type::Block, -1 };
+				}
+			}
+		}
+		return HitTestResult();
+	}
+
+	void LBtnDown(CWnd* pWnd, CPoint pt)
+	{
+		HitTestResult hitTest = HitTest(pt);
+		switch (hitTest.type_)
+		{
+		case HitTestResult::Type::Block:
+		{
+			auto& b = blocks[hitTest.blockIdx_];
+			CRectTracker tracker(b.rc_, CRectTracker::dottedLine | CRectTracker::resizeInside);
+			tracker.Track(pWnd, pt);
+			tracker.GetTrueRect(b.rc_);
+			pWnd->RedrawWindow();
+			break;
+		}
+		case HitTestResult::Type::OutPort:
+		case HitTestResult::Type::InPort:
+		{
+			selected_.enqueue(hitTest);
+			pWnd->RedrawWindow();
+			break;
+		}
+		default:
+			break;
+		}
+	}
+}g_test;
+
+void CMFCApplication1View::OnDraw(CDC* pDC)
+{
+	CMFCApplication1Doc* pDoc = GetDocument();
+	ASSERT_VALID(pDoc);
+	if (!pDoc)
+		return;
+
+	// TODO: 在此处为本机数据添加绘制代码
+	
+	g_test.Draw(pDC);
+	
+}
+
+
+// CMFCApplication1View 打印
+
+BOOL CMFCApplication1View::OnPreparePrinting(CPrintInfo* pInfo)
+{
+	// 默认准备
+	return DoPreparePrinting(pInfo);
+}
+
+void CMFCApplication1View::OnBeginPrinting(CDC* /*pDC*/, CPrintInfo* /*pInfo*/)
+{
+	// TODO: 添加额外的打印前进行的初始化过程
+}
+
+void CMFCApplication1View::OnEndPrinting(CDC* /*pDC*/, CPrintInfo* /*pInfo*/)
+{
+	// TODO: 添加打印后进行的清理过程
+}
+
+
+// CMFCApplication1View 诊断
+
+#ifdef _DEBUG
+void CMFCApplication1View::AssertValid() const
+{
+	CView::AssertValid();
+}
+
+void CMFCApplication1View::Dump(CDumpContext& dc) const
+{
+	CView::Dump(dc);
+}
+
+CMFCApplication1Doc* CMFCApplication1View::GetDocument() const // 非调试版本是内联的
+{
+	ASSERT(m_pDocument->IsKindOf(RUNTIME_CLASS(CMFCApplication1Doc)));
+	return (CMFCApplication1Doc*)m_pDocument;
+}
+#endif //_DEBUG
+
+
+// CMFCApplication1View 消息处理程序
+
+void CMFCApplication1View::OnLButtonDown(UINT nFlags, CPoint point)
+{
+	// TODO: 在此添加消息处理程序代码和/或调用默认值
+	g_test.LBtnDown(this, point);
+
+	CView::OnLButtonDown(nFlags, point);
+}

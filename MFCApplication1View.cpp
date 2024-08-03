@@ -310,9 +310,8 @@ struct Test
 				for (int j = 0; j < ins.size(); j++)
 				{
 					const auto& rc = ins[j];
-					CRectTracker tracker(rc, CRectTracker::dottedLine | CRectTracker::resizeInside);
-					int hitTest = tracker.HitTest(pt);
-					if (hitTest >= 0)
+					
+					if (PtInRect(rc, pt))
 					{
 						return HitTestResult{ i, HitTestResult::Type::InPort, j };
 					}
@@ -324,9 +323,7 @@ struct Test
 				for (int j = 0; j < outs.size(); j++)
 				{
 					const auto& rc = outs[j];
-					CRectTracker tracker(rc, CRectTracker::dottedLine | CRectTracker::resizeInside);
-					int hitTest = tracker.HitTest(pt);
-					if (hitTest >= 0)
+					if (PtInRect(rc, pt))
 					{
 						return HitTestResult{ i, HitTestResult::Type::OutPort, j };
 					}
@@ -334,9 +331,7 @@ struct Test
 			}
 
 			{
-				CRectTracker tracker(b.rc_, CRectTracker::dottedLine | CRectTracker::resizeInside);
-				int hitTest = tracker.HitTest(pt);
-				if (hitTest >= 0)
+				if (PtInRect(b.rc_, pt))
 				{
 					return HitTestResult{ i, HitTestResult::Type::Block, -1 };
 				}

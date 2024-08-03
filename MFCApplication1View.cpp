@@ -13,6 +13,7 @@
 #include "MFCApplication1Doc.h"
 #include "MFCApplication1View.h"
 #include <vector>
+#include <optional>
 #include <deque>
 
 #ifdef _DEBUG
@@ -32,6 +33,7 @@ BEGIN_MESSAGE_MAP(CMFCApplication1View, CView)
 	ON_WM_LBUTTONDOWN()
 	ON_WM_CREATE()
 	ON_WM_MOUSEMOVE()
+	ON_WM_LBUTTONDBLCLK()
 END_MESSAGE_MAP()
 
 // CMFCApplication1View 构造/析构
@@ -86,7 +88,7 @@ struct MyToolTip
 		ti.hwnd = NULL;
 		ti.hinst = NULL;
 		ti.uId = uid;
-		ti.lpszText = "";
+		ti.lpszText = LPSTR("");
 		// ToolTip control will cover the whole window
 		ti.rect.left = 0;
 		ti.rect.top = 0;
@@ -238,7 +240,7 @@ struct Test
 		int portIndx_ = -1;
 	};
 
-	CircularQueue< HitTestResult, 2> selected_;
+	std::optional<HitTestResult> selected_;
 
 	Test()
 	{
@@ -276,7 +278,9 @@ struct Test
 			Line(pDC, pt1, pt2, 0.5 + pitch * (-i + conns_.size() *0.5));
 		}
 
-		selected_.ForEach([pDC, this](HitTestResult const& hitTest) {
+		if (selected_)
+		{
+			const auto& hitTest = *selected_;
 			auto& b = blocks[hitTest.blockIdx_];
 			switch (hitTest.type_)
 			{
@@ -286,16 +290,16 @@ struct Test
 				pDC->Rectangle(CRect(pt.x - 5, pt.y - 5, pt.x + 5, pt.y + 5));
 				break;
 			}
-			case HitTestResult::Type::InPort:
-			{
-				auto pt = b.GetInPortCenter(hitTest.portIndx_);
-				pDC->Rectangle(CRect(pt.x - 5, pt.y - 5, pt.x + 5, pt.y + 5));
-				break;
-			}
+			//case HitTestResult::Type::InPort:
+			//{
+			//	auto pt = b.GetInPortCenter(hitTest.portIndx_);
+			//	pDC->Rectangle(CRect(pt.x - 5, pt.y - 5, pt.x + 5, pt.y + 5));
+			//	break;
+			//}
 			default:
 				break;
 			}
-			});
+		}
 	}
 
 
@@ -340,6 +344,31 @@ struct Test
 		return HitTestResult();
 	}
 
+	void RemoveConnetionWithDestination(int blockIdx_, int portIndx_)
+	{
+		auto isSame = [blockIdx_, portIndx_](Connection const& c)->bool {
+			return c.dstBlockIdx == blockIdx_ && c.dstBlockPortIdx == portIndx_;
+			};
+		auto it = std::find_if(conns_.begin(), conns_.end(), isSame);
+		if (it!= conns_.end())
+		{
+			conns_.erase(it);
+		}
+	}
+
+	void Delete(CWnd* pWnd, CPoint pt)
+	{
+		HitTestResult hitTest = HitTest(pt);
+		switch (hitTest.type_)
+		{
+		case HitTestResult::Type::InPort:
+		{
+			RemoveConnetionWithDestination(hitTest.blockIdx_, hitTest.portIndx_);
+			pWnd->RedrawWindow();
+			break;
+		}
+		}
+	}
 	void LBtnDown(CWnd* pWnd, CPoint pt)
 	{
 		HitTestResult hitTest = HitTest(pt);
@@ -355,10 +384,28 @@ struct Test
 			break;
 		}
 		case HitTestResult::Type::OutPort:
+		{
+			// If it is first click, it must be output type
+			// If it is 2nd click, 
+			// - if it is output type, replace first click
+			// - if it is input type & diff block & connectable, make connection
+			selected_ = hitTest;
+			pWnd->RedrawWindow();
+			break;
+		}
 		case HitTestResult::Type::InPort:
 		{
-			selected_.enqueue(hitTest);
-			pWnd->RedrawWindow();
+			if (selected_)
+			{
+				if(selected_->blockIdx_ != hitTest.blockIdx_)
+				{
+					// a destination cannot have more than one source
+					RemoveConnetionWithDestination(hitTest.blockIdx_, hitTest.portIndx_);
+					conns_.emplace_back(Connection{ selected_->blockIdx_ , selected_->portIndx_ , hitTest.blockIdx_ , hitTest.portIndx_ });
+					selected_.reset();
+					pWnd->RedrawWindow();
+				}
+			}
 			break;
 		}
 		default:
@@ -484,4 +531,13 @@ void CMFCApplication1View::OnMouseMove(UINT nFlags, CPoint point)
 	g_test.ShowToolTip(g_MyToolTip, this, point);
 
 	CView::OnMouseMove(nFlags, point);
+}
+
+
+void CMFCApplication1View::OnLButtonDblClk(UINT nFlags, CPoint point)
+{
+	// TODO: 在此添加消息处理程序代码和/或调用默认值
+	g_test.Delete(this, point);
+
+	CView::OnLButtonDblClk(nFlags, point);
 }

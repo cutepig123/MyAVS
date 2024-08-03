@@ -13,7 +13,7 @@
 #include "MFCApplication1Doc.h"
 #include "MFCApplication1View.h"
 #include <vector>
-#include <optional>
+#include <deque>
 
 #ifdef _DEBUG
 #define new DEBUG_NEW
@@ -135,52 +135,29 @@ void Line(CDC* pDC, CPoint const& pt1, CPoint const& pt2, double ratio)
 template <typename T, size_t N>
 class CircularQueue {
 public:
-	CircularQueue() : front_(0), rear_(0), size_(0) {}
-
-	bool enqueue(const T& value) {
-		if (isFull()) {
-			return false;
-		}
-
-		rear_ = (rear_ + 1) % N;
-		data_[rear_] = value;
-		size_++;
-		return true;
-	}
-
-	bool dequeue(T& value) {
-		if (isEmpty()) {
-			return false;
-		}
-
-		value = data_[front_];
-		front_ = (front_ + 1) % N;
-		size_--;
-		return true;
+	
+	void enqueue(const T& value) {
+		t_.push_back(value);
+		while (t_.size() > N)
+			t_.pop_front();
 	}
 
 	bool isEmpty() const {
-		return size_ == 0;
-	}
-
-	bool isFull() const {
-		return size_ == N;
+		return t_.empty();
 	}
 
 	size_t size() const {
-		return size_;
+		return t_.size();
 	}
 
 	template <class F>
 	void ForEach(F f) const
 	{
-
+		for (const auto& t : t_)
+			f(t);
 	}
 private:
-	T data_[N];
-	size_t front_;
-	size_t rear_;
-	size_t size_;
+	std::deque<T> t_;
 };
 
 
@@ -242,8 +219,28 @@ struct Test
 			double pitch = 0.5 / conns_.size();
 			Line(pDC, pt1, pt2, 0.5 + pitch * (-i + conns_.size() *0.5));
 		}
-	}
 
+		selected_.ForEach([pDC, this](HitTestResult const& hitTest) {
+			auto& b = blocks[hitTest.blockIdx_];
+			switch (hitTest.type_)
+			{
+			case HitTestResult::Type::OutPort:
+			{
+				auto pt = b.GetOutPortCenter(hitTest.portIndx_);
+				pDC->Rectangle(CRect(pt.x - 5, pt.y - 5, pt.x + 5, pt.y + 5));
+				break;
+			}
+			case HitTestResult::Type::InPort:
+			{
+				auto pt = b.GetInPortCenter(hitTest.portIndx_);
+				pDC->Rectangle(CRect(pt.x - 5, pt.y - 5, pt.x + 5, pt.y + 5));
+				break;
+			}
+			default:
+				break;
+			}
+			});
+	}
 
 
 	HitTestResult HitTest(CPoint pt) const

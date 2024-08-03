@@ -30,6 +30,8 @@ BEGIN_MESSAGE_MAP(CMFCApplication1View, CView)
 	ON_COMMAND(ID_FILE_PRINT_DIRECT, &CView::OnFilePrint)
 	ON_COMMAND(ID_FILE_PRINT_PREVIEW, &CView::OnFilePrintPreview)
 	ON_WM_LBUTTONDOWN()
+	ON_WM_CREATE()
+	ON_WM_MOUSEMOVE()
 END_MESSAGE_MAP()
 
 // CMFCApplication1View 构造/析构
@@ -53,6 +55,60 @@ BOOL CMFCApplication1View::PreCreateWindow(CREATESTRUCT& cs)
 }
 
 // CMFCApplication1View 绘图
+
+struct MyToolTip
+{
+	HWND hwndTT = 0;
+	TOOLINFO ti;
+
+	void Create()
+	{
+		unsigned int uid = 0;       // for ti initialization
+		hwndTT = CreateWindowEx(WS_EX_TOPMOST,
+			TOOLTIPS_CLASS,
+			NULL,
+			TTS_NOPREFIX,
+			CW_USEDEFAULT,
+			CW_USEDEFAULT,
+			CW_USEDEFAULT,
+			CW_USEDEFAULT,
+			NULL,
+			NULL,
+			NULL,
+			NULL
+		);
+
+		// INITIALIZE MEMBERS OF THE TOOLINFO STRUCTURE
+		memset(&ti, 0, sizeof(ti));
+		//ti.cbSize = sizeof(TOOLINFO);
+		ti.cbSize = TTTOOLINFO_V1_SIZE;
+		ti.uFlags = TTF_TRACK;
+		ti.hwnd = NULL;
+		ti.hinst = NULL;
+		ti.uId = uid;
+		ti.lpszText = "";
+		// ToolTip control will cover the whole window
+		ti.rect.left = 0;
+		ti.rect.top = 0;
+		ti.rect.right = 0;
+		ti.rect.bottom = 0;
+		::SendMessage(hwndTT, TTM_ADDTOOL, 0, (LPARAM)(LPTOOLINFO)&ti);
+	}
+
+	void Show(const char* strText, CPoint ptMousePosition)
+	{
+		ti.lpszText = (LPSTR)(LPCSTR)strText;
+		::SendMessage(hwndTT, TTM_SETTOOLINFO, 0, (LPARAM)&ti);
+		::SendMessage(hwndTT, TTM_TRACKPOSITION, 0, (LPARAM)(DWORD)MAKELONG(ptMousePosition.x, ptMousePosition.y));
+		::SendMessage(hwndTT, TTM_TRACKACTIVATE, true, (LPARAM)(LPTOOLINFO)&ti);
+	}
+
+	void Hide()
+	{
+		ShowWindow(hwndTT, SW_HIDE);
+	}
+}g_MyToolTip;
+
 std::vector<CRect> GetPortRects(int x, int top, int btm, int num)
 {
 	std::vector<CRect> ret;
@@ -314,6 +370,31 @@ struct Test
 			break;
 		}
 	}
+
+	void ShowToolTip(MyToolTip& tooltip, CWnd*pWnd, CPoint pt)
+	{
+		HitTestResult hitTest = HitTest(pt);
+		switch (hitTest.type_)
+		{
+		case HitTestResult::Type::Block:
+		case HitTestResult::Type::OutPort:
+		case HitTestResult::Type::InPort:
+		{
+			CString text;
+			text.Format("%d %d %d", hitTest.type_, hitTest.blockIdx_, hitTest.portIndx_);
+			CPoint ptScreen = pt;
+			pWnd->ClientToScreen(&ptScreen);
+			ptScreen.x -= 15;
+			ptScreen.y -= 45;
+			tooltip.Show(text, ptScreen);
+			break;
+		}
+		default:
+			tooltip.Hide();
+			break;
+		}
+
+	}
 }g_test;
 
 void CMFCApplication1View::OnDraw(CDC* pDC)
@@ -378,4 +459,34 @@ void CMFCApplication1View::OnLButtonDown(UINT nFlags, CPoint point)
 	g_test.LBtnDown(this, point);
 
 	CView::OnLButtonDown(nFlags, point);
+}
+
+
+BOOL CMFCApplication1View::PreTranslateMessage(MSG* pMsg)
+{
+	// TODO: 在此添加专用代码和/或调用基类
+	
+	return CView::PreTranslateMessage(pMsg);
+}
+
+
+int CMFCApplication1View::OnCreate(LPCREATESTRUCT lpCreateStruct)
+{
+	if (CView::OnCreate(lpCreateStruct) == -1)
+		return -1;
+
+	// TODO:  在此添加您专用的创建代码
+	g_MyToolTip.Create();
+
+	
+	return 0;
+}
+
+
+void CMFCApplication1View::OnMouseMove(UINT nFlags, CPoint point)
+{
+	// TODO: 在此添加消息处理程序代码和/或调用默认值
+	g_test.ShowToolTip(g_MyToolTip, this, point);
+
+	CView::OnMouseMove(nFlags, point);
 }

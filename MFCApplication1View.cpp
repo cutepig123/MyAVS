@@ -12,27 +12,15 @@
 
 #include "MFCApplication1Doc.h"
 #include "MFCApplication1View.h"
-#include <gdiplus.h>
 #include <vector>
 #include <optional>
 #include <deque>
 #include <map>
-#include < algorithm >
 
 #ifdef _DEBUG
 #define new DEBUG_NEW
 #endif
 
-struct GdiplusInit
-{
-	GdiplusInit()
-	{
-		// Initialize GDI+
-		Gdiplus::GdiplusStartupInput gdiplusStartupInput;
-		ULONG_PTR gdiplusToken;
-		VERIFY(Gdiplus::Ok == Gdiplus::GdiplusStartup(&gdiplusToken, &gdiplusStartupInput, NULL));
-	}
-}g_GdiplusInit;
 
 // CMFCApplication1View
 
@@ -173,11 +161,6 @@ std::vector< Port> UserPortToInternalPorts(std::vector< Port> const& ins, int le
 	return ret;
 }
 
-Gdiplus::Rect ToGdiRect(CRect const& rc)
-{
-	return Gdiplus::Rect(rc.left, rc.top, rc.Width(), rc.Height());
-}
-
 class Block
 {
 	CRect rc_;
@@ -204,38 +187,24 @@ public:
 		return rc_.CenterPoint();
 	}
 
-	void Draw(Gdiplus::Graphics& graphics) const
+	void Draw(CDC* pDC) const
 	{
-		COLORREF black = 0;
-		Gdiplus::Pen blackPen(black);
 		// title
-		graphics.DrawRectangle(&blackPen, ToGdiRect(rc_));
-
-		Gdiplus::StringFormat format;
-		format.SetAlignment(Gdiplus::StringAlignmentCenter);
-		format.SetLineAlignment(Gdiplus::StringAlignmentCenter);
-
-		// Create a font and draw the text
-		Gdiplus::Font font(L"Arial", 24.0f);
-		Gdiplus::SolidBrush brush(Gdiplus::Color::White);
-		Gdiplus::RectF layoutRect(rc_.left + 5, rc_.top + 5, 100, 100);
-		graphics.DrawString(CStringW(title_), -1, &font, layoutRect, &format, &brush);
+		pDC->Rectangle(rc_);
+		pDC->TextOut(rc_.left+5, rc_.top+5, title_);
 
 		// Ins
 		for (const auto& port : ins_)
 		{
-			graphics.DrawRectangle(&blackPen, ToGdiRect(port.rc));
-			Gdiplus::RectF layoutRect(port.rc.right, port.rc.top, 100, 100);
-			graphics.DrawString(CStringW(port.name + ":" + port.type), -1, &font, layoutRect, &format, &brush);
-			
+			pDC->Rectangle(port.rc);
+			pDC->TextOutA(port.rc.right, port.rc.top, port.name + ":" + port.type);
 		}
 
 		// Outs
 		for (const auto& port : outs_)
 		{
-			graphics.DrawRectangle(&blackPen, ToGdiRect(port.rc));
-			Gdiplus::RectF layoutRect(port.rc.right, port.rc.top, 100, 100);
-			graphics.DrawString(CStringW(port.name + ":" + port.type), -1, &font, layoutRect, &format, &brush);
+			pDC->Rectangle(port.rc);
+			pDC->TextOutA(port.rc.right, port.rc.top, port.name + ":" + port.type);
 		}
 	}
 
@@ -336,31 +305,31 @@ COLORREF colors[] = {
 	RGB(255, 255, 0)  // Yellow
 };
 size_t NumColors = sizeof(colors) / sizeof(colors[0]);
+static std::map < CString, int> g_dict;
 
 COLORREF GetColorByType(CString const& type)
 {
-	static std::map < CString, int> dict;
-	auto it = dict.find(type);
-	if (it!=dict.end())
+	auto it = g_dict.find(type);
+	if (it!= g_dict.end())
 	{
-		return it->second;
+		return colors[it->second];
 	}
-	int index = dict.size() % NumColors;
-	dict[type] = index;
-	return index;
+	int index = g_dict.size() % NumColors;
+	g_dict[type] = index;
+	return colors[index];
 }
 
-void Line(Gdiplus::Graphics& graphics, CString const& type, CPoint const& pt1, CPoint const& pt2, double ratio)
+void Line(CDC* pDC, CString const& type, CPoint const& pt1, CPoint const& pt2, double ratio)
 {
-	Gdiplus::Pen pen(GetColorByType(type));
-
+	CPen pen(PS_SOLID, 1, GetColorByType(type));
 	double x = (pt2.x - pt1.x) * ratio + pt1.x;
-	Gdiplus::Point points[] = { 
-		Gdiplus::Point(pt1.x, pt1.y), Gdiplus::Point(x, pt1.y), Gdiplus::Point(x, pt2.y), Gdiplus::Point(pt2.x, pt2.y)
-	};
-
-	graphics.DrawLines(&pen, points, 4);
 	
+	auto old = pDC->SelectObject(pen);
+	pDC->MoveTo(pt1);
+	pDC->LineTo(CPoint(x, pt1.y));
+	pDC->LineTo(CPoint(x, pt2.y));
+	pDC->LineTo(pt2);
+	pDC->SelectObject(old);
 }
 
 template <typename T, size_t N>
@@ -451,16 +420,12 @@ struct Test
 		return false;
 	}
 
-	void Draw(CDC* pXDC)
+	void Draw(CDC* pDC)
 	{
-		
-		Gdiplus::Graphics graphics(pXDC->GetSafeHdc());
-		Gdiplus::Pen blackPen(COLORREF(0));
-
 		// blocks
 		for (const auto& b:blocks)
 		{
-			b.Draw(graphics);
+			b.Draw(pDC);
 		}
 		
 		// connections
@@ -470,9 +435,9 @@ struct Test
 			auto pt1 = blocks[conn.srcBlockIdx].GetOutPortCenter(conn.srcBlockPortIdx);
 			auto pt2 = blocks[conn.dstBlockIdx].GetInPortCenter(conn.dstBlockPortIdx);
 
+			auto type = blocks[conn.srcBlockIdx].GetOutPort(conn.srcBlockPortIdx).type;
 			double pitch = 0.5 / conns_.size();
-			CString type = blocks[conn.srcBlockIdx].GetOutPort(conn.srcBlockPortIdx).type;
-			Line(graphics, type, pt1, pt2, 0.5 + pitch * (-i + conns_.size() *0.5));
+			Line(pDC, type, pt1, pt2, 0.5 + pitch * (-i + conns_.size() *0.5));
 		}
 
 		// selections
@@ -485,7 +450,7 @@ struct Test
 			case HitTestResult::Type::OutPort:
 			{
 				auto pt = b.GetOutPortCenter(hitTest.portIndx_);
-				graphics.DrawRectangle(&blackPen, Gdiplus::Rect(pt.x - 5, pt.y - 5, 10, 10));
+				pDC->Rectangle(CRect(pt.x - 5, pt.y - 5, pt.x + 5, pt.y + 5));
 				break;
 			}
 			//case HitTestResult::Type::InPort:

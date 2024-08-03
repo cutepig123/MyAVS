@@ -125,58 +125,169 @@ std::vector<CRect> GetPortRects(int x, int top, int btm, int num)
 	return ret;
 }
 
-struct Block
+struct Port
+{
+	CString name;
+	CString type;
+	CRect rc;	// internal use only
+};
+
+struct HitTestResult
+{
+	int blockIdx_ = -1;
+	enum Type { NA, Block, InPort, OutPort } type_ = NA;
+	int portIndx_ = -1;
+	bool IsHit() const
+	{
+		return type_ != NA;
+	}
+};
+std::vector< Port> UserPortToInternalPorts(std::vector< Port> const& ins, int left, int top, int bottom)
+{
+	std::vector< Port> ret = ins;
+	auto inRects = GetPortRects(left, top, bottom, ins.size());
+	assert(inRects.size() == ret.size());
+	for (size_t i = 0; i < ins.size(); i++)
+	{
+		ret[i].rc = inRects[i];
+	}
+	return ret;
+}
+
+class Block
 {
 	CRect rc_;
 	CString title_;
-	size_t numIns_;
-	size_t numOuts_;
+	std::vector< Port> ins_;
+	std::vector< Port> outs_;
 public:
-	Block():numIns_(0), numOuts_(0){}
+	Block(){}
+
+	Block(CRect const& rect, CString const& title, std::vector< Port> const& ins, std::vector< Port> const& outs)
+		:rc_(rect), title_(title)
+	{
+		ins_ = UserPortToInternalPorts(ins, rc_.left, rc_.top, rc_.bottom);
+		outs_ = UserPortToInternalPorts(outs, rc_.right, rc_.top, rc_.bottom);
+	}
+
+	const CString& title() const
+	{
+		return title_;
+	}
+
+	CPoint CenterPoint() const
+	{
+		return rc_.CenterPoint();
+	}
 
 	void Draw(CDC* pDC) const
 	{
+		// title
 		pDC->Rectangle(rc_);
 		pDC->TextOut(rc_.left+5, rc_.top+5, title_);
 
-		//for (size_t i = 0; i < numIns_; i++)
-		//{
-		//	double pitch = 1.0 * rc_.Height() / (numIns_ + 1);
-		//	double portSize = pitch / 4;
-		//	double centerX = rc_.left;
-		//	double centerY= rc_.top + pitch + i * pitch;
-		//	pDC->Rectangle(centerX - portSize, centerY - portSize, centerX + portSize, centerY + portSize);
-		//}
+		// Ins
+		for (const auto& port : ins_)
+		{
+			pDC->Rectangle(port.rc);
+			pDC->TextOutA(port.rc.right, port.rc.top, port.name + ":" + port.type);
+		}
 
-		for (const auto& rc : GetPortRects(rc_.left, rc_.top, rc_.bottom, numIns_))
+		// Outs
+		for (const auto& port : outs_)
 		{
-			pDC->Rectangle(rc);
+			pDC->Rectangle(port.rc);
+			pDC->TextOutA(port.rc.right, port.rc.top, port.name + ":" + port.type);
 		}
-		for (const auto& rc : GetPortRects(rc_.right, rc_.top, rc_.bottom, numOuts_))
-		{
-			pDC->Rectangle(rc);
-		}
+	}
+
+	CRect GetRect() const
+	{
+		return rc_;
+	}
+
+	//void SetRect(CRect const& rc)
+	//{
+	//	rc_ = rc;
+	//	ins_ = UserPortToInternalPorts(ins_, rc_.left, rc_.top, rc_.bottom);
+	//	outs_ = UserPortToInternalPorts(outs_, rc_.right, rc_.top, rc_.bottom);
+	//}
+
+	void Offset(CPoint const& offset)
+	{
+		rc_ += offset;
+		ins_ = UserPortToInternalPorts(ins_, rc_.left, rc_.top, rc_.bottom);
+		outs_ = UserPortToInternalPorts(outs_, rc_.right, rc_.top, rc_.bottom);
+	}
+
+	const Port& GetInPort(size_t i) const
+	{
+		return ins_.at(i);
+	}
+
+	const Port& GetOutPort(size_t i) const
+	{
+		return outs_.at(i);
 	}
 
 	std::vector<CRect> GetInPortRects() const
 	{
-		return GetPortRects(rc_.left, rc_.top, rc_.bottom, numIns_);
+		return GetPortRects(rc_.left, rc_.top, rc_.bottom, ins_.size());
 	}
 	std::vector<CRect> GetOutPortRects() const
 	{
-		return GetPortRects(rc_.right, rc_.top, rc_.bottom, numOuts_);
+		return GetPortRects(rc_.right, rc_.top, rc_.bottom, outs_.size());
 	}
 
 	CPoint GetInPortCenter(size_t i) const
 	{
-		auto rects = GetPortRects(rc_.left, rc_.top, rc_.bottom, numIns_);
+		auto rects = GetPortRects(rc_.left, rc_.top, rc_.bottom, ins_.size());
 		return rects[i].CenterPoint();
 	}
 
 	CPoint GetOutPortCenter(size_t i) const
 	{
-		auto rects = GetPortRects(rc_.right, rc_.top, rc_.bottom, numOuts_);
+		auto rects = GetPortRects(rc_.right, rc_.top, rc_.bottom, outs_.size());
 		return rects[i].CenterPoint();
+	}
+
+	HitTestResult HitTest(CPoint pt) const
+	{
+		const auto& b = *this;
+
+		{
+			auto ins = b.GetInPortRects();
+			for (int j = 0; j < ins.size(); j++)
+			{
+				const auto& rc = ins[j];
+
+				if (PtInRect(rc, pt))
+				{
+					return HitTestResult{ 0, HitTestResult::Type::InPort, j };
+				}
+			}
+		}
+
+		{
+			auto outs = b.GetOutPortRects();
+			for (int j = 0; j < outs.size(); j++)
+			{
+				const auto& rc = outs[j];
+				if (PtInRect(rc, pt))
+				{
+					return HitTestResult{ 0, HitTestResult::Type::OutPort, j };
+				}
+			}
+		}
+
+		{
+			if (PtInRect(b.GetRect(), pt))
+			{
+				return HitTestResult{ 0, HitTestResult::Type::Block, -1 };
+			}
+		}
+		
+		return HitTestResult();
 	}
 };
 
@@ -218,6 +329,18 @@ private:
 	std::deque<T> t_;
 };
 
+std::vector<Port> MakePorts(const char* prefix, int n)
+{
+	std::vector<Port> ret;
+	for (int i = 0; i < n; i++)
+	{
+		CString name;
+		name.Format("%s %d", prefix, i);
+		CString type; type.Format("type%d", i);
+		ret.emplace_back(Port{ name , type });
+	}
+	return ret;
+}
 
 struct Test
 {
@@ -233,25 +356,15 @@ struct Test
 	};
 	std::vector<Connection> conns_;
 
-	struct HitTestResult
-	{
-		int blockIdx_ = -1;
-		enum Type { NA, Block, InPort, OutPort } type_ = NA;
-		int portIndx_ = -1;
-	};
-
 	std::optional<HitTestResult> selected_;
 
 	Test()
 	{
 		for (int i = 0; i < 2; i++)
 		{
-			Block block1;
 			int x = 100 + 300 * i, y = 100 + 300 * i;
-			block1.rc_ = CRect(x, y, x+200, y+200);
-			block1.title_.Format("block%d", i);
-			block1.numIns_ = 3;
-			block1.numOuts_ = 4;
+			CString title_; title_.Format("block%d", i);
+			Block block1(CRect(x, y, x + 200, y + 200), title_, MakePorts("in", 3), MakePorts("out", 4));
 			blocks.push_back(block1);
 		}
 
@@ -259,13 +372,32 @@ struct Test
 			conns_.emplace_back(Connection{ 0,i,1,i });
 	}
 
+	bool Connect(int srcBlockIdx, int srcBlockPortIdx, int dstBlockIdx, int dstBlockPortIdx)
+	{
+		if (srcBlockIdx != dstBlockIdx)
+		{
+			auto type1 = blocks.at(srcBlockIdx).GetOutPort(srcBlockPortIdx).type;
+			auto type2 = blocks.at(dstBlockIdx).GetInPort(dstBlockPortIdx).type;
+			if (type1 == type2)
+			{
+				// a destination cannot have more than one source
+				RemoveConnetionWithDestination(dstBlockIdx, dstBlockPortIdx);
+				conns_.emplace_back(Connection{ srcBlockIdx , srcBlockPortIdx , dstBlockIdx , dstBlockPortIdx });
+				return true;
+			}
+		}
+		return false;
+	}
+
 	void Draw(CDC* pDC)
 	{
+		// blocks
 		for (const auto& b:blocks)
 		{
 			b.Draw(pDC);
 		}
 		
+		// connections
 		for (int i=0; i<conns_.size(); i++)
 		{
 			const auto& conn = conns_[i];
@@ -278,6 +410,7 @@ struct Test
 			Line(pDC, pt1, pt2, 0.5 + pitch * (-i + conns_.size() *0.5));
 		}
 
+		// selections
 		if (selected_)
 		{
 			const auto& hitTest = *selected_;
@@ -309,36 +442,12 @@ struct Test
 		{
 			const auto& b = blocks[i];
 
-			{
-				auto ins = b.GetInPortRects();
-				for (int j = 0; j < ins.size(); j++)
-				{
-					const auto& rc = ins[j];
-					
-					if (PtInRect(rc, pt))
-					{
-						return HitTestResult{ i, HitTestResult::Type::InPort, j };
-					}
-				}
-			}
+			auto ret = b.HitTest(pt);
 
+			if (ret.IsHit())
 			{
-				auto outs = b.GetOutPortRects();
-				for (int j = 0; j < outs.size(); j++)
-				{
-					const auto& rc = outs[j];
-					if (PtInRect(rc, pt))
-					{
-						return HitTestResult{ i, HitTestResult::Type::OutPort, j };
-					}
-				}
-			}
-
-			{
-				if (PtInRect(b.rc_, pt))
-				{
-					return HitTestResult{ i, HitTestResult::Type::Block, -1 };
-				}
+				ret.blockIdx_ = i;
+				return ret;
 			}
 		}
 		return HitTestResult();
@@ -377,10 +486,15 @@ struct Test
 		case HitTestResult::Type::Block:
 		{
 			auto& b = blocks[hitTest.blockIdx_];
-			CRectTracker tracker(b.rc_, CRectTracker::dottedLine | CRectTracker::resizeInside);
-			tracker.Track(pWnd, pt);
-			tracker.GetTrueRect(b.rc_);
-			pWnd->RedrawWindow();
+			CRectTracker tracker(b.GetRect(), CRectTracker::dottedLine | CRectTracker::resizeInside);
+			if (tracker.Track(pWnd, pt))
+			{
+				CRect rc;
+				tracker.GetTrueRect(rc);
+				b.Offset(rc.CenterPoint()-b.CenterPoint());
+
+				pWnd->RedrawWindow();
+			}
 			break;
 		}
 		case HitTestResult::Type::OutPort:
@@ -397,11 +511,8 @@ struct Test
 		{
 			if (selected_)
 			{
-				if(selected_->blockIdx_ != hitTest.blockIdx_)
+				if(Connect(selected_->blockIdx_, selected_->portIndx_, hitTest.blockIdx_, hitTest.portIndx_))
 				{
-					// a destination cannot have more than one source
-					RemoveConnetionWithDestination(hitTest.blockIdx_, hitTest.portIndx_);
-					conns_.emplace_back(Connection{ selected_->blockIdx_ , selected_->portIndx_ , hitTest.blockIdx_ , hitTest.portIndx_ });
 					selected_.reset();
 					pWnd->RedrawWindow();
 				}
@@ -416,19 +527,28 @@ struct Test
 	void ShowToolTip(MyToolTip& tooltip, CWnd*pWnd, CPoint pt)
 	{
 		HitTestResult hitTest = HitTest(pt);
+		CString text;
+
 		switch (hitTest.type_)
 		{
 		case HitTestResult::Type::Block:
+		{
+			auto const& b = blocks[hitTest.blockIdx_];
+			text = b.title();
+			break;
+		}
 		case HitTestResult::Type::OutPort:
+		{
+			auto const& b = blocks[hitTest.blockIdx_];
+			const auto& p = b.GetOutPort(hitTest.portIndx_);
+			text.Format("%s %s %s", b.title(), p.name, p.type);
+			break;
+		}
 		case HitTestResult::Type::InPort:
 		{
-			CString text;
-			text.Format("%d %d %d", hitTest.type_, hitTest.blockIdx_, hitTest.portIndx_);
-			CPoint ptScreen = pt;
-			pWnd->ClientToScreen(&ptScreen);
-			ptScreen.x -= 15;
-			ptScreen.y -= 45;
-			tooltip.Show(text, ptScreen);
+			auto const& b = blocks[hitTest.blockIdx_];
+			const auto& p = b.GetInPort(hitTest.portIndx_);
+			text.Format("%s %s %s", b.title(), p.name, p.type);
 			break;
 		}
 		default:
@@ -436,6 +556,14 @@ struct Test
 			break;
 		}
 
+		if (!text.IsEmpty())
+		{
+			CPoint ptScreen = pt;
+			pWnd->ClientToScreen(&ptScreen);
+			ptScreen.x -= 15;
+			ptScreen.y -= 45;
+			tooltip.Show(text, ptScreen);
+		}
 	}
 }g_test;
 

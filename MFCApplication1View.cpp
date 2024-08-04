@@ -154,7 +154,12 @@ public:
 		outsRect_ = GetPortRects(rc_.right, rc_.top, rc_.bottom, (int)Access::GetUserFilterImpl(*userFilter_).outs_.size()); 
 	}
 
-	const CString& title() const
+	void Invoke()
+	{
+		userFilter_->Invoke();
+	}
+
+	CString title() const
 	{
 		return Access::GetUserFilterImpl(*userFilter_).name_.c_str();
 	}
@@ -215,6 +220,11 @@ public:
 	}
 
 	const UserFilterImpl::Port& GetInPort(size_t i) const
+	{
+		return Access::GetUserFilterImpl(*userFilter_).ins_.at(i);
+	}
+
+	UserFilterImpl::Port& GetInPort(size_t i)
 	{
 		return Access::GetUserFilterImpl(*userFilter_).ins_.at(i);
 	}
@@ -350,6 +360,54 @@ struct Test
 		//for (int i = 0; i < 3; i++)
 		//	conns_.emplace_back(Connection{ 0,i,1,i });
 	}
+
+	void Invoke()
+	{
+		std::vector<int> outstandingInputs(blocks.size(), 0);	// Num of "Not ready" inputs for each block
+		for (const auto& conn : conns_)
+		{
+			outstandingInputs.at(conn.dstBlockIdx)++;
+		}
+
+		std::deque<int> readyBlocks;
+		// Find a node/UserFilter whose inputs are all ready (ie no connection destination is it)
+		for (size_t i=0; i<blocks.size(); i++)
+		{
+			bool bIsReady = outstandingInputs[i] == 0;
+			if (bIsReady)
+			{
+				readyBlocks.push_back((int)i);
+			}
+		}
+
+		while (!readyBlocks.empty())
+		{
+			// Invoke
+			int currentIdx = readyBlocks.front();
+			Block& current = blocks.at(currentIdx);
+			current.Invoke();
+			readyBlocks.pop_front();
+
+			// Update successor Inputs
+			for (const auto& conn : conns_)
+			{
+				if (conn.srcBlockIdx == currentIdx)
+				{
+					// Update successor Inputs
+					blocks.at(conn.dstBlockIdx).GetInPort(conn.dstBlockPortIdx).value
+						= blocks.at(conn.srcBlockIdx).GetOutPort(conn.srcBlockPortIdx).value;
+					// Update successor outstandingInputs
+					outstandingInputs.at(conn.dstBlockIdx)--;
+					// add to queue if it is ready
+					if (outstandingInputs.at(conn.dstBlockIdx)==0)
+					{
+						readyBlocks.push_back(conn.dstBlockIdx);
+					}
+				}
+			}
+		}
+	}
+
 	std::set<int> GetAllSuccessorNodes(int blocksIdx) const
 	{
 		std::set<int> successors;
@@ -622,6 +680,7 @@ BEGIN_MESSAGE_MAP(CMFCApplication1View, CView)
 	ON_WM_CREATE()
 	ON_WM_MOUSEMOVE()
 	ON_WM_LBUTTONDBLCLK()
+	ON_COMMAND(ID_BUTTON_RUN, &CMFCApplication1View::OnButtonRun)
 END_MESSAGE_MAP()
 
 // CMFCApplication1View 构造/析构
@@ -746,4 +805,11 @@ void CMFCApplication1View::OnLButtonDblClk(UINT nFlags, CPoint point)
 	g_test->Delete(this, point);
 
 	CView::OnLButtonDblClk(nFlags, point);
+}
+
+void CMFCApplication1View::OnButtonRun()
+{
+	// TODO: 在此添加命令处理程序代码
+	g_test->Invoke();
+	RedrawWindow();
 }

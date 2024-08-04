@@ -16,6 +16,7 @@
 #include <optional>
 #include <deque>
 #include <map>
+#include <set>
 
 #ifdef _DEBUG
 #define new DEBUG_NEW
@@ -39,7 +40,7 @@ COLORREF GetColorByType(CString const& type)
 	{
 		return colors[it->second];
 	}
-	int index = g_dict.size() % NumColors;
+	int index = (int)g_dict.size() % NumColors;
 	g_dict[type] = index;
 	return colors[index];
 }
@@ -139,6 +140,12 @@ const T& Mymin(const T& a, const T& b)
 	return (b < a) ? b : a;
 }
 
+template<class T>
+const T& MyMax(const T& a, const T& b)
+{
+	return (b > a) ? b : a;
+}
+
 std::vector<CRect> GetPortRects(int x, int top, int btm, int num)
 {
 	std::vector<CRect> ret;
@@ -173,7 +180,7 @@ struct HitTestResult
 std::vector< Port> UserPortToInternalPorts(std::vector< Port> const& ins, int left, int top, int bottom)
 {
 	std::vector< Port> ret = ins;
-	auto inRects = GetPortRects(left, top, bottom, ins.size());
+	auto inRects = GetPortRects(left, top, bottom, (int)ins.size());
 	assert(inRects.size() == ret.size());
 	for (size_t i = 0; i < ins.size(); i++)
 	{
@@ -266,22 +273,22 @@ public:
 
 	std::vector<CRect> GetInPortRects() const
 	{
-		return GetPortRects(rc_.left, rc_.top, rc_.bottom, ins_.size());
+		return GetPortRects(rc_.left, rc_.top, rc_.bottom, (int)ins_.size());
 	}
 	std::vector<CRect> GetOutPortRects() const
 	{
-		return GetPortRects(rc_.right, rc_.top, rc_.bottom, outs_.size());
+		return GetPortRects(rc_.right, rc_.top, rc_.bottom, (int)outs_.size());
 	}
 
 	CPoint GetInPortCenter(size_t i) const
 	{
-		auto rects = GetPortRects(rc_.left, rc_.top, rc_.bottom, ins_.size());
+		auto rects = GetPortRects(rc_.left, rc_.top, rc_.bottom, (int)ins_.size());
 		return rects[i].CenterPoint();
 	}
 
 	CPoint GetOutPortCenter(size_t i) const
 	{
-		auto rects = GetPortRects(rc_.right, rc_.top, rc_.bottom, outs_.size());
+		auto rects = GetPortRects(rc_.right, rc_.top, rc_.bottom, (int)outs_.size());
 		return rects[i].CenterPoint();
 	}
 
@@ -333,39 +340,11 @@ void Line(CDC* pDC, CString const& type, CPoint const& pt1, CPoint const& pt2, d
 	
 	auto old = pDC->SelectObject(pen);
 	pDC->MoveTo(pt1);
-	pDC->LineTo(CPoint(x, pt1.y));
-	pDC->LineTo(CPoint(x, pt2.y));
+	pDC->LineTo(CPoint((int)x, pt1.y));
+	pDC->LineTo(CPoint((int)x, pt2.y));
 	pDC->LineTo(pt2);
 	pDC->SelectObject(old);
 }
-
-template <typename T, size_t N>
-class CircularQueue {
-public:
-	
-	void enqueue(const T& value) {
-		t_.push_back(value);
-		while (t_.size() > N)
-			t_.pop_front();
-	}
-
-	bool isEmpty() const {
-		return t_.empty();
-	}
-
-	size_t size() const {
-		return t_.size();
-	}
-
-	template <class F>
-	void ForEach(F f) const
-	{
-		for (const auto& t : t_)
-			f(t);
-	}
-private:
-	std::deque<T> t_;
-};
 
 std::vector<Port> MakePorts(const char* prefix, int n)
 {
@@ -374,10 +353,19 @@ std::vector<Port> MakePorts(const char* prefix, int n)
 	{
 		CString name;
 		name.Format("%s %d", prefix, i);
-		CString type; type.Format("type%d", i);
+		CString type; type.Format("type%d", i%2);
 		ret.emplace_back(Port{ name , type });
 	}
 	return ret;
+}
+
+CString MyFormat(const char* fmt, ...)
+{
+	va_list l;
+	va_start(l, fmt);
+	CString s;
+	s.FormatV(fmt, l);
+	return s;
 }
 
 struct Test
@@ -409,22 +397,74 @@ struct Test
 		for (int i = 0; i < 3; i++)
 			conns_.emplace_back(Connection{ 0,i,1,i });
 	}
-
-	bool Connect(int srcBlockIdx, int srcBlockPortIdx, int dstBlockIdx, int dstBlockPortIdx)
+	std::set<int> GetAllSuccessorNodes(int blocksIdx) const
 	{
-		if (srcBlockIdx != dstBlockIdx)
+		std::set<int> successors;
+		
+		while (true)
 		{
-			auto type1 = blocks.at(srcBlockIdx).GetOutPort(srcBlockPortIdx).type;
-			auto type2 = blocks.at(dstBlockIdx).GetInPort(dstBlockPortIdx).type;
-			if (type1 == type2)
+			bool bcontinue = false;
+			for (const auto& conn : conns_)
 			{
-				// a destination cannot have more than one source
-				RemoveConnetionWithDestination(dstBlockIdx, dstBlockPortIdx);
-				conns_.emplace_back(Connection{ srcBlockIdx , srcBlockPortIdx , dstBlockIdx , dstBlockPortIdx });
-				return true;
+				if (conn.srcBlockIdx == blocksIdx || std::find(successors.begin(), successors.end(), blocksIdx) != successors.end())
+				{
+					if (std::find(successors.begin(), successors.end(), conn.dstBlockIdx) == successors.end())
+					{
+						successors.insert(conn.dstBlockIdx);
+						bcontinue = true;
+					}
+				}
+			}
+
+			if (!bcontinue)
+			{
+				break;
 			}
 		}
-		return false;
+
+		return successors;
+	}
+
+	struct ConnectResult
+	{
+		bool succeed = false;
+		CString error;
+	};
+
+	ConnectResult Connect(int srcBlockIdx, int srcBlockPortIdx, int dstBlockIdx, int dstBlockPortIdx)
+	{
+		if (srcBlockIdx == dstBlockIdx)
+		{
+			return ConnectResult{ false, "Same block" };
+		}
+		
+		auto type1 = blocks.at(srcBlockIdx).GetOutPort(srcBlockPortIdx).type;
+		auto type2 = blocks.at(dstBlockIdx).GetInPort(dstBlockPortIdx).type;
+		if (type1 != type2)
+		{
+			return ConnectResult{ false, "Diff type" };
+		}
+			
+		// a destination cannot have more than one source
+		//RemoveConnetionWithDestination(dstBlockIdx, dstBlockPortIdx);
+		auto isSame = [dstBlockIdx, dstBlockPortIdx](Connection const& c)->bool {
+			return c.dstBlockIdx == dstBlockIdx && c.dstBlockPortIdx == dstBlockPortIdx;
+			};
+		auto it = std::find_if(conns_.begin(), conns_.end(), isSame);
+		if (it != conns_.end())
+			return ConnectResult{ false, "Already have source connected" };
+
+		// block之間不能有循環鏈接
+		auto successors = GetAllSuccessorNodes(dstBlockIdx);
+		if (std::find(successors.begin(), successors.end(), srcBlockIdx) != successors.end())
+		{
+			return ConnectResult{ false, "Circular Dependence" };
+		}
+		
+		// insert connection
+		conns_.emplace_back(Connection{ srcBlockIdx , srcBlockPortIdx , dstBlockIdx , dstBlockPortIdx });
+		return ConnectResult{ true, "" };;
+			
 	}
 
 	void Draw(CDC* pDC)
@@ -443,8 +483,9 @@ struct Test
 			auto pt2 = blocks[conn.dstBlockIdx].GetInPortCenter(conn.dstBlockPortIdx);
 
 			auto type = blocks[conn.srcBlockIdx].GetOutPort(conn.srcBlockPortIdx).type;
-			double pitch = 0.5 / conns_.size();
-			Line(pDC, type, pt1, pt2, 0.5 + pitch * (-i + conns_.size() *0.5));
+			auto numConn = MyMax(6, (int)conns_.size());
+			double pitch = 0.5 / numConn;
+			Line(pDC, type, pt1, pt2, 0.5 + pitch * (-i + numConn *0.5));
 		}
 
 		// selections
@@ -515,7 +556,7 @@ struct Test
 		}
 		}
 	}
-	void LBtnDown(CWnd* pWnd, CPoint pt)
+	void LBtnDown(MyToolTip& tooltip, CWnd* pWnd, CPoint pt)
 	{
 		HitTestResult hitTest = HitTest(pt);
 		switch (hitTest.type_)
@@ -548,10 +589,19 @@ struct Test
 		{
 			if (selected_)
 			{
-				if(Connect(selected_->blockIdx_, selected_->portIndx_, hitTest.blockIdx_, hitTest.portIndx_))
+				auto connSts = Connect(selected_->blockIdx_, selected_->portIndx_, hitTest.blockIdx_, hitTest.portIndx_);
+				if(connSts.succeed)
 				{
 					selected_.reset();
 					pWnd->RedrawWindow();
+				}
+				else
+				{
+					CPoint ptScreen = pt;
+					pWnd->ClientToScreen(&ptScreen);
+					ptScreen.x -= 15;
+					ptScreen.y -= 45;
+					tooltip.Show(connSts.error, ptScreen);
 				}
 			}
 			break;
@@ -663,7 +713,7 @@ CMFCApplication1Doc* CMFCApplication1View::GetDocument() const // 非调试版�
 void CMFCApplication1View::OnLButtonDown(UINT nFlags, CPoint point)
 {
 	// TODO: 在此添加消息处理程序代码和/或调用默认值
-	g_test.LBtnDown(this, point);
+	g_test.LBtnDown(g_MyToolTip, this, point);
 
 	CView::OnLButtonDown(nFlags, point);
 }
@@ -693,7 +743,7 @@ int CMFCApplication1View::OnCreate(LPCREATESTRUCT lpCreateStruct)
 void CMFCApplication1View::OnMouseMove(UINT nFlags, CPoint point)
 {
 	// TODO: 在此添加消息处理程序代码和/或调用默认值
-	g_test.ShowToolTip(g_MyToolTip, this, point);
+	//g_test.ShowToolTip(g_MyToolTip, this, point);
 
 	CView::OnMouseMove(nFlags, point);
 }

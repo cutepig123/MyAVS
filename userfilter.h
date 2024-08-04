@@ -145,7 +145,7 @@ class UserFilter
 	//std::map<std::string, boost::shared_ptr<SerializableData>> ins_;
 	//std::map<std::string, boost::shared_ptr<SerializableData>> outs_;
 
-	//friend struct Access;
+	friend struct Access;
 	std::unique_ptr<UserFilterImpl> impl_;
 public:
 	UserFilter();

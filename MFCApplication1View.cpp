@@ -12,6 +12,8 @@
 
 #include "MFCApplication1Doc.h"
 #include "MFCApplication1View.h"
+#include "userfilter.h"
+#include "userfilterimpl.h"
 #include <vector>
 #include <optional>
 #include <deque>
@@ -44,42 +46,7 @@ COLORREF GetColorByType(CString const& type)
 	g_dict[type] = index;
 	return colors[index];
 }
-// CMFCApplication1View
 
-IMPLEMENT_DYNCREATE(CMFCApplication1View, CView)
-
-BEGIN_MESSAGE_MAP(CMFCApplication1View, CView)
-	// 标准打印命令
-	ON_COMMAND(ID_FILE_PRINT, &CView::OnFilePrint)
-	ON_COMMAND(ID_FILE_PRINT_DIRECT, &CView::OnFilePrint)
-	ON_COMMAND(ID_FILE_PRINT_PREVIEW, &CView::OnFilePrintPreview)
-	ON_WM_LBUTTONDOWN()
-	ON_WM_CREATE()
-	ON_WM_MOUSEMOVE()
-	ON_WM_LBUTTONDBLCLK()
-END_MESSAGE_MAP()
-
-// CMFCApplication1View 构造/析构
-
-CMFCApplication1View::CMFCApplication1View() noexcept
-{
-	// TODO: 在此处添加构造代码
-
-}
-
-CMFCApplication1View::~CMFCApplication1View()
-{
-}
-
-BOOL CMFCApplication1View::PreCreateWindow(CREATESTRUCT& cs)
-{
-	// TODO: 在此处通过修改
-	//  CREATESTRUCT cs 来修改窗口类或样式
-
-	return CView::PreCreateWindow(cs);
-}
-
-// CMFCApplication1View 绘图
 
 struct MyToolTip
 {
@@ -160,13 +127,6 @@ std::vector<CRect> GetPortRects(int x, int top, int btm, int num)
 	return ret;
 }
 
-struct Port
-{
-	CString name;
-	CString type;
-	CRect rc;	// internal use only
-};
-
 struct HitTestResult
 {
 	int blockIdx_ = -1;
@@ -177,37 +137,26 @@ struct HitTestResult
 		return type_ != NA;
 	}
 };
-std::vector< Port> UserPortToInternalPorts(std::vector< Port> const& ins, int left, int top, int bottom)
-{
-	std::vector< Port> ret = ins;
-	auto inRects = GetPortRects(left, top, bottom, (int)ins.size());
-	assert(inRects.size() == ret.size());
-	for (size_t i = 0; i < ins.size(); i++)
-	{
-		ret[i].rc = inRects[i];
-	}
-	return ret;
-}
 
 class Block
 {
 	CRect rc_;
-	CString title_;
-	std::vector< Port> ins_;
-	std::vector< Port> outs_;
+	std::unique_ptr<UserFilter> userFilter_;
+	std::vector< CRect> insRect_;
+	std::vector< CRect> outsRect_;
 public:
 	Block(){}
 
-	Block(CRect const& rect, CString const& title, std::vector< Port> const& ins, std::vector< Port> const& outs)
-		:rc_(rect), title_(title)
+	Block(CRect const& rect, std::unique_ptr<UserFilter>&& userFilter)
+		:rc_(rect), userFilter_(std::move(userFilter))
 	{
-		ins_ = UserPortToInternalPorts(ins, rc_.left, rc_.top, rc_.bottom);
-		outs_ = UserPortToInternalPorts(outs, rc_.right, rc_.top, rc_.bottom);
+		insRect_ = GetPortRects(rc_.left, rc_.top, rc_.bottom, (int)Access::GetUserFilterImpl(*userFilter_).ins_.size());
+		outsRect_ = GetPortRects(rc_.right, rc_.top, rc_.bottom, (int)Access::GetUserFilterImpl(*userFilter_).outs_.size()); 
 	}
 
 	const CString& title() const
 	{
-		return title_;
+		return Access::GetUserFilterImpl(*userFilter_).name_.c_str();
 	}
 
 	CPoint CenterPoint() const
@@ -219,25 +168,29 @@ public:
 	{
 		// title
 		pDC->Rectangle(rc_);
-		pDC->TextOut(rc_.left+5, rc_.top+5, title_);
+		pDC->TextOut(rc_.left+5, rc_.top+5, title());
 
 		// Ins
-		for (const auto& port : ins_)
+		for (size_t i=0; i< insRect_.size(); i++)
 		{
-			CPen pen(PS_SOLID, 1, GetColorByType(port.type));
+			const auto& rc = insRect_.at(i);
+			const auto& port = Access::GetUserFilterImpl(*userFilter_).ins_.at(i);
+			CPen pen(PS_SOLID, 1, GetColorByType(port.type.c_str()));
 			auto old = pDC->SelectObject(pen);
-			pDC->Rectangle(port.rc);
-			pDC->TextOutA(port.rc.right, port.rc.top, port.name + ":" + port.type);
+			pDC->Rectangle(rc);
+			pDC->TextOutA(rc.right, rc.top, (port.name + ":" + port.value + ":" + port.type).c_str());
 			pDC->SelectObject(old);
 		}
 
 		// Outs
-		for (const auto& port : outs_)
+		for (size_t i = 0; i < outsRect_.size(); i++)
 		{
-			CPen pen(PS_SOLID, 1, GetColorByType(port.type));
+			const auto& rc = outsRect_.at(i);
+			const auto& port = Access::GetUserFilterImpl(*userFilter_).outs_.at(i);
+			CPen pen(PS_SOLID, 1, GetColorByType(port.type.c_str()));
 			auto old = pDC->SelectObject(pen);
-			pDC->Rectangle(port.rc);
-			pDC->TextOutA(port.rc.right, port.rc.top, port.name + ":" + port.type);
+			pDC->Rectangle(rc);
+			pDC->TextOutA(rc.right, rc.top, (port.name + ":" + port.value + ":" + port.type).c_str());
 			pDC->SelectObject(old);
 		}
 	}
@@ -250,45 +203,45 @@ public:
 	void SetRect(CRect const& rc)
 	{
 		rc_ = rc;
-		ins_ = UserPortToInternalPorts(ins_, rc_.left, rc_.top, rc_.bottom);
-		outs_ = UserPortToInternalPorts(outs_, rc_.right, rc_.top, rc_.bottom);
+		insRect_ = GetPortRects(rc_.left, rc_.top, rc_.bottom, (int)Access::GetUserFilterImpl(*userFilter_).ins_.size());
+		outsRect_ = GetPortRects(rc_.right, rc_.top, rc_.bottom, (int)Access::GetUserFilterImpl(*userFilter_).outs_.size());
 	}
 
 	void Offset(CPoint const& offset)
 	{
 		rc_ += offset;
-		ins_ = UserPortToInternalPorts(ins_, rc_.left, rc_.top, rc_.bottom);
-		outs_ = UserPortToInternalPorts(outs_, rc_.right, rc_.top, rc_.bottom);
+		insRect_ = GetPortRects(rc_.left, rc_.top, rc_.bottom, (int)Access::GetUserFilterImpl(*userFilter_).ins_.size());
+		outsRect_ = GetPortRects(rc_.right, rc_.top, rc_.bottom, (int)Access::GetUserFilterImpl(*userFilter_).outs_.size());
 	}
 
-	const Port& GetInPort(size_t i) const
+	const UserFilterImpl::Port& GetInPort(size_t i) const
 	{
-		return ins_.at(i);
+		return Access::GetUserFilterImpl(*userFilter_).ins_.at(i);
 	}
 
-	const Port& GetOutPort(size_t i) const
+	const UserFilterImpl::Port& GetOutPort(size_t i) const
 	{
-		return outs_.at(i);
+		return Access::GetUserFilterImpl(*userFilter_).outs_.at(i);
 	}
 
 	std::vector<CRect> GetInPortRects() const
 	{
-		return GetPortRects(rc_.left, rc_.top, rc_.bottom, (int)ins_.size());
+		return GetPortRects(rc_.left, rc_.top, rc_.bottom, (int)insRect_.size());
 	}
 	std::vector<CRect> GetOutPortRects() const
 	{
-		return GetPortRects(rc_.right, rc_.top, rc_.bottom, (int)outs_.size());
+		return GetPortRects(rc_.right, rc_.top, rc_.bottom, (int)outsRect_.size());
 	}
 
 	CPoint GetInPortCenter(size_t i) const
 	{
-		auto rects = GetPortRects(rc_.left, rc_.top, rc_.bottom, (int)ins_.size());
+		auto rects = GetPortRects(rc_.left, rc_.top, rc_.bottom, (int)insRect_.size());
 		return rects[i].CenterPoint();
 	}
 
 	CPoint GetOutPortCenter(size_t i) const
 	{
-		auto rects = GetPortRects(rc_.right, rc_.top, rc_.bottom, (int)outs_.size());
+		auto rects = GetPortRects(rc_.right, rc_.top, rc_.bottom, (int)outsRect_.size());
 		return rects[i].CenterPoint();
 	}
 
@@ -346,18 +299,18 @@ void Line(CDC* pDC, CString const& type, CPoint const& pt1, CPoint const& pt2, d
 	pDC->SelectObject(old);
 }
 
-std::vector<Port> MakePorts(const char* prefix, int n)
-{
-	std::vector<Port> ret;
-	for (int i = 0; i < n; i++)
-	{
-		CString name;
-		name.Format("%s %d", prefix, i);
-		CString type; type.Format("type%d", i%2);
-		ret.emplace_back(Port{ name , type });
-	}
-	return ret;
-}
+//std::vector<Port> MakePorts(const char* prefix, int n)
+//{
+//	std::vector<Port> ret;
+//	for (int i = 0; i < n; i++)
+//	{
+//		CString name;
+//		name.Format("%s %d", prefix, i);
+//		CString type; type.Format("type%d", i%2);
+//		ret.emplace_back(Port{ name , type });
+//	}
+//	return ret;
+//}
 
 CString MyFormat(const char* fmt, ...)
 {
@@ -386,16 +339,16 @@ struct Test
 
 	Test()
 	{
+		// TODO
 		for (int i = 0; i < 2; i++)
 		{
 			int x = 100 + 300 * i, y = 100 + 300 * i;
-			CString title_; title_.Format("block%d", i);
-			Block block1(CRect(x, y, x + 200, y + 200), title_, MakePorts("in", 3), MakePorts("out", 4));
-			blocks.push_back(block1);
+			Block block1(CRect(x, y, x + 200, y + 200), CreateFilter("Add"));
+			blocks.push_back(std::move(block1));
 		}
 
-		for (int i = 0; i < 3; i++)
-			conns_.emplace_back(Connection{ 0,i,1,i });
+		//for (int i = 0; i < 3; i++)
+		//	conns_.emplace_back(Connection{ 0,i,1,i });
 	}
 	std::set<int> GetAllSuccessorNodes(int blocksIdx) const
 	{
@@ -485,7 +438,7 @@ struct Test
 			auto type = blocks[conn.srcBlockIdx].GetOutPort(conn.srcBlockPortIdx).type;
 			auto numConn = MyMax(6, (int)conns_.size());
 			double pitch = 0.5 / numConn;
-			Line(pDC, type, pt1, pt2, 0.5 + pitch * (-i + numConn *0.5));
+			Line(pDC, type.c_str(), pt1, pt2, 0.5 + pitch * (-i + numConn * 0.5));
 		}
 
 		// selections
@@ -652,8 +605,46 @@ struct Test
 			tooltip.Show(text, ptScreen);
 		}
 	}
-}g_test;
+};
 
+std::unique_ptr<Test> g_test;
+
+// CMFCApplication1View
+
+IMPLEMENT_DYNCREATE(CMFCApplication1View, CView)
+
+BEGIN_MESSAGE_MAP(CMFCApplication1View, CView)
+	// 标准打印命令
+	ON_COMMAND(ID_FILE_PRINT, &CView::OnFilePrint)
+	ON_COMMAND(ID_FILE_PRINT_DIRECT, &CView::OnFilePrint)
+	ON_COMMAND(ID_FILE_PRINT_PREVIEW, &CView::OnFilePrintPreview)
+	ON_WM_LBUTTONDOWN()
+	ON_WM_CREATE()
+	ON_WM_MOUSEMOVE()
+	ON_WM_LBUTTONDBLCLK()
+END_MESSAGE_MAP()
+
+// CMFCApplication1View 构造/析构
+
+CMFCApplication1View::CMFCApplication1View() noexcept
+{
+	// TODO: 在此处添加构造代码
+
+}
+
+CMFCApplication1View::~CMFCApplication1View()
+{
+}
+
+BOOL CMFCApplication1View::PreCreateWindow(CREATESTRUCT& cs)
+{
+	// TODO: 在此处通过修改
+	//  CREATESTRUCT cs 来修改窗口类或样式
+	g_test.reset(new Test);
+	return CView::PreCreateWindow(cs);
+}
+
+// CMFCApplication1View 绘图
 void CMFCApplication1View::OnDraw(CDC* pDC)
 {
 	CMFCApplication1Doc* pDoc = GetDocument();
@@ -663,7 +654,7 @@ void CMFCApplication1View::OnDraw(CDC* pDC)
 
 	// TODO: 在此处为本机数据添加绘制代码
 	
-	g_test.Draw(pDC);
+	g_test->Draw(pDC);
 	
 }
 
@@ -713,7 +704,7 @@ CMFCApplication1Doc* CMFCApplication1View::GetDocument() const // 非调试版�
 void CMFCApplication1View::OnLButtonDown(UINT nFlags, CPoint point)
 {
 	// TODO: 在此添加消息处理程序代码和/或调用默认值
-	g_test.LBtnDown(g_MyToolTip, this, point);
+	g_test->LBtnDown(g_MyToolTip, this, point);
 
 	CView::OnLButtonDown(nFlags, point);
 }
@@ -752,7 +743,7 @@ void CMFCApplication1View::OnMouseMove(UINT nFlags, CPoint point)
 void CMFCApplication1View::OnLButtonDblClk(UINT nFlags, CPoint point)
 {
 	// TODO: 在此添加消息处理程序代码和/或调用默认值
-	g_test.Delete(this, point);
+	g_test->Delete(this, point);
 
 	CView::OnLButtonDblClk(nFlags, point);
 }

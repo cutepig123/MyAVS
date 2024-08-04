@@ -68,3 +68,11 @@ public:
 		Write(outs_, name, t);
 	}
 };
+
+struct Access
+{
+	static UserFilterImpl& GetUserFilterImpl(UserFilter& f)
+	{
+		return *f.impl_;
+	}
+};

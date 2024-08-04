@@ -6,12 +6,25 @@
 #include <map>
 #include <assert.h>
 
-static std::map<std::string, std::function<UserFilter* ()>>	filterCreators_;
+static std::map<std::string, std::function<UserFilter* ()>>	*g_pfilterCreators_ = nullptr;
+
+std::map<std::string, std::function<UserFilter* ()>>& GetFilterCreatorFactory()
+{
+	static std::map<std::string, std::function<UserFilter* ()>>	filterCreators_;
+	if (!g_pfilterCreators_)
+	{
+		g_pfilterCreators_ = &filterCreators_;
+	}
+	return filterCreators_;
+}
 
 UserFilter::UserFilter():impl_(new UserFilterImpl)
 {
 
 }
+
+UserFilter::~UserFilter()
+{}
 
 void UserFilter::SetName(const char* name)
 {
@@ -38,28 +51,20 @@ void UserFilter::WriteOutput(const char* name, std::string const& t)
 	impl_->WriteOutput(name, t);
 }
 
-
-struct Access
-{
-	static UserFilterImpl& GetUserFilterImpl(UserFilter& f)
-	{
-		return *f.impl_;
-	}
-};
-
-void RegisterFilter(std::function<UserFilter* ()> const& create)
+int RegisterFilter(std::function<UserFilter* ()> const& create)
 {
 	std::unique_ptr<UserFilter> t(create());
 	t->Define();
 	auto name = Access::GetUserFilterImpl(*t).name_;
-	assert(filterCreators_.find(name) == filterCreators_.end());
-	filterCreators_[name] = create;
+	assert(GetFilterCreatorFactory().find(name) == GetFilterCreatorFactory().end());
+	GetFilterCreatorFactory()[name] = create;
+	return 0;
 }
 
 std::unique_ptr<UserFilter> CreateFilter(const char* name)
 {
-	auto it = filterCreators_.find(name);
-	assert(it != filterCreators_.end());
+	auto it = GetFilterCreatorFactory().find(name);
+	assert(it != GetFilterCreatorFactory().end());
 	auto filter = it->second();
 	filter->Define();
 	return std::unique_ptr<UserFilter>(filter);
@@ -68,7 +73,7 @@ std::unique_ptr<UserFilter> CreateFilter(const char* name)
 std::vector<std::string> GetAllUserFilters()
 {
 	std::vector<std::string> keys;
-	for (const auto& pair : filterCreators_) {
+	for (const auto& pair : GetFilterCreatorFactory()) {
 		keys.push_back(pair.first);
 	}
 	return keys;

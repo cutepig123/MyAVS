@@ -122,7 +122,7 @@ std::vector<CRect> GetPortRects(int x, int top, int btm, int num)
 
 struct HitTestResult
 {
-	int blockIdx_ = -1;
+	CString blockName_;
 	enum Type { NA, Block, InPort, OutPort } type_ = NA;
 	int portIndx_ = -1;
 	bool IsHit() const
@@ -132,8 +132,8 @@ struct HitTestResult
 
 	HitTestResult() {}
 
-	HitTestResult(int blockIdx, Type type, int portIndx)
-		:blockIdx_(blockIdx), type_(type), portIndx_(portIndx)
+	HitTestResult(CString const& blockName, Type type, int portIndx)
+		:blockName_(blockName), type_(type), portIndx_(portIndx)
 	{}
 };
 
@@ -332,25 +332,36 @@ CString MyFormat(const char* fmt, ...)
 
 struct Test
 {
-	std::vector<Block> blocks;
+	std::map<CString, Block> blocks;
 
 	struct Connection
 	{
-		int srcBlockIdx=0;
+		CString srcBlockName;
 		int srcBlockPortIdx = 0;
 
-		int dstBlockIdx = 0;
+		CString dstBlockName;
 		int dstBlockPortIdx = 0;
 
 		Connection() {}
-		Connection(int srcBlockIdx_, int srcBlockPortIdx_, int dstBlockIdx_, int dstBlockPortIdx_)
-		:srcBlockIdx(srcBlockIdx_), srcBlockPortIdx(srcBlockPortIdx_)
-			, dstBlockIdx(dstBlockIdx_), dstBlockPortIdx(dstBlockPortIdx_)
+		Connection(CString const& srcBlockName_, int srcBlockPortIdx_, CString const& dstBlockName_, int dstBlockPortIdx_)
+		:srcBlockName(srcBlockName_), srcBlockPortIdx(srcBlockPortIdx_)
+			, dstBlockName(dstBlockName_), dstBlockPortIdx(dstBlockPortIdx_)
 		{}
 	};
 	std::vector<Connection> conns_;
 
 	std::optional<HitTestResult> selected_;
+
+    CString NewBlockName(const char* prefix)
+    {
+        for(int i=0; ; i++)
+        {
+            CString name;
+            name.Format("%s %d", prefix, i);
+            if(blocks.find(name)==blocks.end())
+                return name;
+        }
+    }
 
 	Test()
 	{
@@ -359,7 +370,7 @@ struct Test
 		{
 			int x = 100 + 300 * i, y = 100 + 300 * i;
 			Block block1(CRect(x, y, x + 200, y + 200), CreateFilter("Add"));
-			blocks.push_back(std::move(block1));
+			blocks[NewBlockName("Add")] = (std::move(block1));
 		}
 
 		//for (int i = 0; i < 3; i++)
@@ -371,70 +382,76 @@ struct Test
 		int i = 0;
 		int x = 200 + 300 * i, y = 100 + 300 * i;
 		Block block1(CRect(x, y, x + 200, y + 200), CreateFilter(name));
-		blocks.push_back(std::move(block1));
+		blocks[NewBlockName(name)] = (std::move(block1));
 	}
 
 	void Invoke()
 	{
-		std::vector<int> outstandingInputs(blocks.size(), 0);	// Num of "Not ready" inputs for each block
-		for (const auto& conn : conns_)
+		std::map<CString, int> outstandingInputs;	// Num of "Not ready" inputs for each block
+        for (const auto& b : blocks)
 		{
-			outstandingInputs.at(conn.dstBlockIdx)++;
+			outstandingInputs[b.first] =0;
 		}
 
-		std::deque<int> readyBlocks;
-		// Find a node/UserFilter whose inputs are all ready (ie no connection destination is it)
-		for (size_t i=0; i<blocks.size(); i++)
+		for (const auto& conn : conns_)
 		{
-			bool bIsReady = outstandingInputs[i] == 0;
+			outstandingInputs[conn.dstBlockName]++;
+		}
+
+		std::deque<CString> readyBlocks;
+		// Find a node/UserFilter whose inputs are all ready (ie no connection destination is it)
+		for (const auto& b : blocks)
+		{
+			bool bIsReady = outstandingInputs[b.first] == 0;
 			if (bIsReady)
 			{
-				readyBlocks.push_back((int)i);
+				readyBlocks.push_back(b.first);
 			}
 		}
 
 		while (!readyBlocks.empty())
 		{
 			// Invoke
-			int currentIdx = readyBlocks.front();
-			Block& current = blocks.at(currentIdx);
+			CString currentName = readyBlocks.front();
+			Block& current = blocks.at(currentName);
 			current.Invoke();
 			readyBlocks.pop_front();
 
 			// Update successor Inputs
 			for (const auto& conn : conns_)
 			{
-				if (conn.srcBlockIdx == currentIdx)
+				if (conn.srcBlockName == currentName)
 				{
 					// Update successor Inputs
-					blocks.at(conn.dstBlockIdx).GetInPort(conn.dstBlockPortIdx).value
-						= blocks.at(conn.srcBlockIdx).GetOutPort(conn.srcBlockPortIdx).value;
+					blocks.at(conn.dstBlockName).GetInPort(conn.dstBlockPortIdx).value
+						= blocks.at(conn.srcBlockName).GetOutPort(conn.srcBlockPortIdx).value;
 					// Update successor outstandingInputs
-					outstandingInputs.at(conn.dstBlockIdx)--;
+					outstandingInputs.at(conn.dstBlockName)--;
 					// add to queue if it is ready
-					if (outstandingInputs.at(conn.dstBlockIdx)==0)
+					if (outstandingInputs.at(conn.dstBlockName)==0)
 					{
-						readyBlocks.push_back(conn.dstBlockIdx);
+						readyBlocks.push_back(conn.dstBlockName);
 					}
 				}
 			}
 		}
 	}
 
-	std::set<int> GetAllSuccessorNodes(int blocksIdx) const
+	std::set<CString> GetAllSuccessorNodes(CString const& blocksName) const
 	{
-		std::set<int> successors;
+		std::set<CString> successors;
 		
 		while (true)
 		{
 			bool bcontinue = false;
 			for (const auto& conn : conns_)
 			{
-				if (conn.srcBlockIdx == blocksIdx || std::find(successors.begin(), successors.end(), blocksIdx) != successors.end())
+                if (conn.srcBlockName == blocksName 
+                || std::find(successors.begin(), successors.end(), conn.srcBlockName) != successors.end())
 				{
-					if (std::find(successors.begin(), successors.end(), conn.dstBlockIdx) == successors.end())
+					if (std::find(successors.begin(), successors.end(), conn.dstBlockName) == successors.end())
 					{
-						successors.insert(conn.dstBlockIdx);
+						successors.insert(conn.dstBlockName);
 						bcontinue = true;
 					}
 				}
@@ -459,38 +476,38 @@ struct Test
 		{}
 	};
 
-	ConnectResult Connect(int srcBlockIdx, int srcBlockPortIdx, int dstBlockIdx, int dstBlockPortIdx)
+	ConnectResult Connect(const CString& srcBlockName, int srcBlockPortIdx, const CString& dstBlockName, int dstBlockPortIdx)
 	{
-		if (srcBlockIdx == dstBlockIdx)
+		if (srcBlockName == dstBlockName)
 		{
 			return ConnectResult( false, "Same block" );
 		}
 		
-		auto type1 = blocks.at(srcBlockIdx).GetOutPort(srcBlockPortIdx).type;
-		auto type2 = blocks.at(dstBlockIdx).GetInPort(dstBlockPortIdx).type;
+		auto type1 = blocks.at(srcBlockName).GetOutPort(srcBlockPortIdx).type;
+		auto type2 = blocks.at(dstBlockName).GetInPort(dstBlockPortIdx).type;
 		if (type1 != type2)
 		{
 			return ConnectResult( false, "Diff type" );
 		}
 			
 		// a destination cannot have more than one source
-		//RemoveConnetionWithDestination(dstBlockIdx, dstBlockPortIdx);
-		auto isSame = [dstBlockIdx, dstBlockPortIdx](Connection const& c)->bool {
-			return c.dstBlockIdx == dstBlockIdx && c.dstBlockPortIdx == dstBlockPortIdx;
+		//RemoveConnetionWithDestination(dstblockName, dstBlockPortIdx);
+		auto isSame = [dstBlockName, dstBlockPortIdx](Connection const& c)->bool {
+			return c.dstBlockName == dstBlockName && c.dstBlockPortIdx == dstBlockPortIdx;
 			};
 		auto it = std::find_if(conns_.begin(), conns_.end(), isSame);
 		if (it != conns_.end())
 			return ConnectResult( false, "Already have source connected" );
 
 		// block之間不能有循環鏈接
-		auto successors = GetAllSuccessorNodes(dstBlockIdx);
-		if (std::find(successors.begin(), successors.end(), srcBlockIdx) != successors.end())
+		auto successors = GetAllSuccessorNodes(dstBlockName);
+		if (std::find(successors.begin(), successors.end(), srcBlockName) != successors.end())
 		{
 			return ConnectResult( false, "Circular Dependence" );
 		}
 		
 		// insert connection
-		conns_.emplace_back(Connection{ srcBlockIdx , srcBlockPortIdx , dstBlockIdx , dstBlockPortIdx });
+		conns_.emplace_back(Connection{ srcBlockName , srcBlockPortIdx , dstBlockName , dstBlockPortIdx });
 		return ConnectResult( true, "" );
 			
 	}
@@ -500,17 +517,19 @@ struct Test
 		// blocks
 		for (const auto& b:blocks)
 		{
-			b.Draw(pDC);
+			b.second.Draw(pDC);
+            auto center = b.second.CenterPoint();
+            pDC->TextOut(center.x-5, center.y-5, b.first);
 		}
 		
 		// connections
 		for (int i=0; i<conns_.size(); i++)
 		{
 			const auto& conn = conns_[i];
-			auto pt1 = blocks[conn.srcBlockIdx].GetOutPortCenter(conn.srcBlockPortIdx);
-			auto pt2 = blocks[conn.dstBlockIdx].GetInPortCenter(conn.dstBlockPortIdx);
+			auto pt1 = blocks[conn.srcBlockName].GetOutPortCenter(conn.srcBlockPortIdx);
+			auto pt2 = blocks[conn.dstBlockName].GetInPortCenter(conn.dstBlockPortIdx);
 
-			auto type = blocks[conn.srcBlockIdx].GetOutPort(conn.srcBlockPortIdx).type;
+			auto type = blocks[conn.srcBlockName].GetOutPort(conn.srcBlockPortIdx).type;
 			auto numConn = MyMax(6, (int)conns_.size());
 			double pitch = 0.5 / numConn;
 			Line(pDC, type.c_str(), pt1, pt2, 0.5 + pitch * (-i + numConn * 0.5));
@@ -520,7 +539,7 @@ struct Test
 		if (selected_)
 		{
 			const auto& hitTest = *selected_;
-			auto& b = blocks[hitTest.blockIdx_];
+			auto& b = blocks[hitTest.blockName_];
 			switch (hitTest.type_)
 			{
 			case HitTestResult::Type::OutPort:
@@ -544,25 +563,23 @@ struct Test
 
 	HitTestResult HitTest(CPoint pt) const
 	{
-		for (int i=0; i<blocks.size(); i++)
+		for (const auto&b: blocks)
 		{
-			const auto& b = blocks[i];
-
-			auto ret = b.HitTest(pt);
+			auto ret = b.second.HitTest(pt);
 
 			if (ret.IsHit())
 			{
-				ret.blockIdx_ = i;
+				ret.blockName_ = b.first;
 				return ret;
 			}
 		}
 		return HitTestResult();
 	}
 
-	void RemoveConnetionWithDestination(int blockIdx_, int portIndx_)
+	void RemoveConnetionWithDestination(CString const& blockName_, int portIndx_)
 	{
-		auto isSame = [blockIdx_, portIndx_](Connection const& c)->bool {
-			return c.dstBlockIdx == blockIdx_ && c.dstBlockPortIdx == portIndx_;
+		auto isSame = [blockName_, portIndx_](Connection const& c)->bool {
+			return c.dstBlockName == blockName_ && c.dstBlockPortIdx == portIndx_;
 			};
 		auto it = std::find_if(conns_.begin(), conns_.end(), isSame);
 		if (it!= conns_.end())
@@ -571,11 +588,18 @@ struct Test
 		}
 	}
 
-	void DeleteBlock(int blockIdx)
+	void DeleteBlock(CString const& blockName)
 	{
-		// FIXME: Need save block name instead of block index!
 		// Delete related connections
+		for (int i = conns_.size() - 1; i >= 0; i--)
+		{
+			if (conns_[i].dstBlockName == blockName || conns_[i].srcBlockName == blockName)
+			{
+				conns_.erase(conns_.begin() + i);
+			}
+		}
 		// Delete related blocks
+		blocks.erase(blockName);
 	}
 
 	void OnLButtonDblClk(CWnd* pWnd, CPoint pt)
@@ -585,13 +609,13 @@ struct Test
 		{
 		case HitTestResult::Type::InPort:
 		{
-			RemoveConnetionWithDestination(hitTest.blockIdx_, hitTest.portIndx_);
+			RemoveConnetionWithDestination(hitTest.blockName_, hitTest.portIndx_);
 			pWnd->RedrawWindow();
 			break;
 		}
 		case HitTestResult::Type::Block:
 		{
-			DeleteBlock(hitTest.blockIdx_);
+			DeleteBlock(hitTest.blockName_);
 			pWnd->RedrawWindow();
 			break;
 		}
@@ -605,7 +629,7 @@ struct Test
 		{
 		case HitTestResult::Type::Block:
 		{
-			auto& b = blocks[hitTest.blockIdx_];
+			auto& b = blocks[hitTest.blockName_];
 			CRectTracker tracker(b.GetRect(), CRectTracker::dottedLine | CRectTracker::resizeInside);
 			if (tracker.Track(pWnd, pt))
 			{
@@ -631,7 +655,7 @@ struct Test
 		{
 			if (selected_)
 			{
-				auto connSts = Connect(selected_->blockIdx_, selected_->portIndx_, hitTest.blockIdx_, hitTest.portIndx_);
+				auto connSts = Connect(selected_->blockName_, selected_->portIndx_, hitTest.blockName_, hitTest.portIndx_);
 				if(connSts.succeed)
 				{
 					selected_.reset();
@@ -662,20 +686,20 @@ struct Test
 		{
 		case HitTestResult::Type::Block:
 		{
-			auto const& b = blocks[hitTest.blockIdx_];
+			auto const& b = blocks[hitTest.blockName_];
 			text = b.title();
 			break;
 		}
 		case HitTestResult::Type::OutPort:
 		{
-			auto const& b = blocks[hitTest.blockIdx_];
+			auto const& b = blocks[hitTest.blockName_];
 			const auto& p = b.GetOutPort(hitTest.portIndx_);
 			text.Format("%s %s %s", b.title(), p.name, p.type);
 			break;
 		}
 		case HitTestResult::Type::InPort:
 		{
-			auto const& b = blocks[hitTest.blockIdx_];
+			auto const& b = blocks[hitTest.blockName_];
 			const auto& p = b.GetInPort(hitTest.portIndx_);
 			text.Format("%s %s %s", b.title(), p.name, p.type);
 			break;

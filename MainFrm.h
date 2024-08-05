@@ -3,6 +3,7 @@
 //
 
 #pragma once
+#include "MyDlgBar.h"
 
 class CMainFrame : public CFrameWnd
 {
@@ -29,10 +30,12 @@ public:
 	virtual void Dump(CDumpContext& dc) const;
 #endif
 
+	CMyDlgBar		m_wndDlgBar;
+
 protected:  // 控件条嵌入成员
 	CToolBar          m_wndToolBar;
 	CStatusBar        m_wndStatusBar;
-
+	
 // 生成的消息映射函数
 protected:
 	afx_msg int OnCreate(LPCREATESTRUCT lpCreateStruct);

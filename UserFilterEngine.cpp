@@ -647,31 +647,38 @@ struct Test
 			// If it is 2nd click, 
 			// - if it is output type, replace first click
 			// - if it is input type & diff block & connectable, make connection
-			selected_ = hitTest;
-			pWnd->RedrawWindow();
-			break;
-		}
-		case HitTestResult::Type::InPort:
-		{
-			if (selected_)
+			//selected_ = hitTest;
+
+			auto& b = blocks[hitTest.blockName_];
+			CRectTracker tracker(b.GetOutPortRects().at(hitTest.portIndx_), CRectTracker::dottedLine | CRectTracker::resizeInside);
+			if (tracker.Track(pWnd, pt))
 			{
-				auto connSts = Connect(selected_->blockName_, selected_->portIndx_, hitTest.blockName_, hitTest.portIndx_);
-				if(connSts.succeed)
+				CRect rc;
+				tracker.GetTrueRect(rc);
+				HitTestResult hitTest2 = HitTest(rc.CenterPoint());
+				if (hitTest2.type_== HitTestResult::Type::InPort)
 				{
-					selected_.reset();
-					pWnd->RedrawWindow();
+					auto connSts = Connect(hitTest.blockName_, hitTest.portIndx_, hitTest2.blockName_, hitTest2.portIndx_);
+					if (connSts.succeed)
+					{
+						selected_.reset();
+						pWnd->RedrawWindow();
+					}
+					else
+					{
+						CPoint ptScreen = rc.CenterPoint();
+						pWnd->ClientToScreen(&ptScreen);
+						ptScreen.x -= 15;
+						ptScreen.y -= 45;
+						tooltip.Show(connSts.error, ptScreen);
+					}
 				}
-				else
-				{
-					CPoint ptScreen = pt;
-					pWnd->ClientToScreen(&ptScreen);
-					ptScreen.x -= 15;
-					ptScreen.y -= 45;
-					tooltip.Show(connSts.error, ptScreen);
-				}
+
 			}
+
 			break;
 		}
+
 		default:
 			break;
 		}

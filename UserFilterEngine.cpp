@@ -330,6 +330,58 @@ CString MyFormat(const char* fmt, ...)
 	return s;
 }
 
+CPoint TrackLine(CWnd* pWnd, CPoint point)
+{
+	pWnd->SetCapture();
+
+	auto pDrawDC = pWnd->GetDC();
+	CPoint newPt = point;
+
+	for (;;)
+	{
+		MSG msg;
+		VERIFY(::GetMessage(&msg, NULL, 0, 0));
+
+		if (CWnd::GetCapture() != pWnd)
+			break;
+
+		switch (msg.message)
+		{
+			// handle movement/accept messages
+		case WM_LBUTTONUP:
+		case WM_MOUSEMOVE:
+			newPt = CPoint(GET_X_LPARAM(msg.lParam), GET_Y_LPARAM(msg.lParam));
+
+			pWnd->RedrawWindow();
+			pDrawDC->MoveTo(point);
+			pDrawDC->LineTo(newPt);
+
+			if (msg.message == WM_LBUTTONUP)
+			{
+				goto ExitLoop;
+
+			}
+			break;
+
+			// handle cancel messages
+		case WM_KEYDOWN:
+			if (msg.wParam != VK_ESCAPE)
+				break;
+
+		default:
+			DispatchMessage(&msg);
+			break;
+		}
+	}
+
+ExitLoop:
+	pWnd->ReleaseDC(pDrawDC);
+	ReleaseCapture();
+	pWnd->RedrawWindow();
+
+	return newPt;
+}
+
 struct Test
 {
 	std::map<CString, Block> blocks;
@@ -650,32 +702,26 @@ struct Test
 			//selected_ = hitTest;
 
 			auto& b = blocks[hitTest.blockName_];
-			CRectTracker tracker(b.GetOutPortRects().at(hitTest.portIndx_), CRectTracker::dottedLine | CRectTracker::resizeInside);
-			if (tracker.Track(pWnd, pt))
+			CPoint newPt = TrackLine(pWnd, pt);
+			HitTestResult hitTest2 = HitTest(newPt);
+			if (hitTest2.type_== HitTestResult::Type::InPort)
 			{
-				CRect rc;
-				tracker.GetTrueRect(rc);
-				HitTestResult hitTest2 = HitTest(rc.CenterPoint());
-				if (hitTest2.type_== HitTestResult::Type::InPort)
+				auto connSts = Connect(hitTest.blockName_, hitTest.portIndx_, hitTest2.blockName_, hitTest2.portIndx_);
+				if (connSts.succeed)
 				{
-					auto connSts = Connect(hitTest.blockName_, hitTest.portIndx_, hitTest2.blockName_, hitTest2.portIndx_);
-					if (connSts.succeed)
-					{
-						selected_.reset();
-						pWnd->RedrawWindow();
-					}
-					else
-					{
-						CPoint ptScreen = rc.CenterPoint();
-						pWnd->ClientToScreen(&ptScreen);
-						ptScreen.x -= 15;
-						ptScreen.y -= 45;
-						tooltip.Show(connSts.error, ptScreen);
-					}
+					selected_.reset();
+					pWnd->RedrawWindow();
 				}
-
+				else
+				{
+					CPoint ptScreen = newPt;
+					pWnd->ClientToScreen(&ptScreen);
+					ptScreen.x -= 15;
+					ptScreen.y -= 45;
+					tooltip.Show(connSts.error, ptScreen);
+				}
 			}
-
+			
 			break;
 		}
 

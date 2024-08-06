@@ -3,6 +3,7 @@
 
 #include "MFCApplication1Doc.h"
 #include "MFCApplication1View.h"
+#include "MemberBrowserDlg.h"
 #include "InpuParaDlg.h"
 #include "mainfrm.h"
 #include "userfilter.h"
@@ -105,16 +106,27 @@ const T& MyMax(const T& a, const T& b)
 	return (b > a) ? b : a;
 }
 
-std::vector<CRect> GetPortRects(int x, int top, int btm, int num)
+
+CRect GetPortRect(int x, int top, int btm, size_t numPorts, size_t currentPortIndex)
 {
-	std::vector<CRect> ret;
+	std::map<CString, CRect> ret;
+	size_t i = currentPortIndex;
+	
+	double pitch = 1.0 * (btm - top) / (numPorts + 1);
+	double portSize = Mymin(pitch / 4, 10.0);
+	double centerX = x;
+	double centerY = top + pitch + i * pitch;
+	return CRect(centerX - portSize, centerY - portSize, centerX + portSize, centerY + portSize);
+	
+}
+
+std::map<CString, CRect> GetPortRects(int x, int top, int btm, std::vector<UserFilterImpl::Port> const& ports)
+{
+	size_t num = ports.size();
+	std::map<CString, CRect> ret;
 	for (size_t i = 0; i < num; i++)
 	{
-		double pitch = 1.0 * (btm-top) / (num + 1);
-		double portSize = Mymin(pitch / 4, 10.0);
-		double centerX = x;
-		double centerY = top + pitch + i * pitch;
-		ret.emplace_back(centerX - portSize, centerY - portSize, centerX + portSize, centerY + portSize);
+		ret[ports.at(i).name.c_str()] = GetPortRect(x, top, btm, num, i);
 	}
 	return ret;
 }
@@ -123,7 +135,7 @@ struct HitTestResult
 {
 	CString blockName_;
 	enum Type { NA, Block, InPort, OutPort } type_ = NA;
-	int portIndx_ = -1;
+	CString portIndx_;
 	bool IsHit() const
 	{
 		return type_ != NA;
@@ -131,7 +143,7 @@ struct HitTestResult
 
 	HitTestResult() {}
 
-	HitTestResult(CString const& blockName, Type type, int portIndx)
+	HitTestResult(CString const& blockName, Type type, CString const& portIndx)
 		:blockName_(blockName), type_(type), portIndx_(portIndx)
 	{}
 };
@@ -140,16 +152,13 @@ class Block
 {
 	CRect rc_;
 	std::unique_ptr<UserFilter> userFilter_;
-	std::vector< CRect> insRect_;
-	std::vector< CRect> outsRect_;
+
 public:
 	Block(){}
 
 	Block(CRect const& rect, std::unique_ptr<UserFilter>&& userFilter)
 		:rc_(rect), userFilter_(std::move(userFilter))
 	{
-		insRect_ = GetPortRects(rc_.left, rc_.top, rc_.bottom, (int)Access::GetUserFilterImpl(*userFilter_).ins_.size());
-		outsRect_ = GetPortRects(rc_.right, rc_.top, rc_.bottom, (int)Access::GetUserFilterImpl(*userFilter_).outs_.size()); 
 	}
 
 	void Invoke()
@@ -174,10 +183,10 @@ public:
 		pDC->TextOut(rc_.left+5, rc_.top+5, title());
 
 		// Ins
-		for (size_t i=0; i< insRect_.size(); i++)
+		for (const auto&i: GetInPortRects())
 		{
-			const auto& rc = insRect_.at(i);
-			const auto& port = Access::GetUserFilterImpl(*userFilter_).ins_.at(i);
+			const auto& rc = i.second;
+			const auto& port = Access::GetUserFilterImpl(*userFilter_).GetInput(i.first);
 			CPen pen(PS_SOLID, 1, GetColorByType(port.type.c_str()));
 			auto old = pDC->SelectObject(pen);
 			pDC->Rectangle(rc);
@@ -186,10 +195,10 @@ public:
 		}
 
 		// Outs
-		for (size_t i = 0; i < outsRect_.size(); i++)
+		for (const auto& i : GetOutPortRects())
 		{
-			const auto& rc = outsRect_.at(i);
-			const auto& port = Access::GetUserFilterImpl(*userFilter_).outs_.at(i);
+			const auto& rc = i.second;
+			const auto& port = Access::GetUserFilterImpl(*userFilter_).GetOutput(i.first);
 			CPen pen(PS_SOLID, 1, GetColorByType(port.type.c_str()));
 			auto old = pDC->SelectObject(pen);
 			pDC->Rectangle(rc);
@@ -206,51 +215,64 @@ public:
 	void SetRect(CRect const& rc)
 	{
 		rc_ = rc;
-		insRect_ = GetPortRects(rc_.left, rc_.top, rc_.bottom, (int)Access::GetUserFilterImpl(*userFilter_).ins_.size());
-		outsRect_ = GetPortRects(rc_.right, rc_.top, rc_.bottom, (int)Access::GetUserFilterImpl(*userFilter_).outs_.size());
 	}
 
 	void Offset(CPoint const& offset)
 	{
 		rc_ += offset;
-		insRect_ = GetPortRects(rc_.left, rc_.top, rc_.bottom, (int)Access::GetUserFilterImpl(*userFilter_).ins_.size());
-		outsRect_ = GetPortRects(rc_.right, rc_.top, rc_.bottom, (int)Access::GetUserFilterImpl(*userFilter_).outs_.size());
+		
+		
 	}
 
-	const UserFilterImpl::Port& GetInPort(size_t i) const
+	const UserFilterImpl::Port& GetInPort(const char* i) const
 	{
-		return Access::GetUserFilterImpl(*userFilter_).ins_.at(i);
+		return Access::GetUserFilterImpl(*userFilter_).GetInput(i);
 	}
 
-	UserFilterImpl::Port& GetInPort(size_t i)
+	UserFilterImpl::Port& GetInPort(const char* i)
 	{
-		return Access::GetUserFilterImpl(*userFilter_).ins_.at(i);
+		return Access::GetUserFilterImpl(*userFilter_).GetInput(i);
 	}
 
-	const UserFilterImpl::Port& GetOutPort(size_t i) const
+	const UserFilterImpl::Port& GetOutPort(const char* i) const
 	{
-		return Access::GetUserFilterImpl(*userFilter_).outs_.at(i);
+		return Access::GetUserFilterImpl(*userFilter_).GetOutput(i);
 	}
 
-	std::vector<CRect> GetInPortRects() const
+	std::map<CString, CRect> GetInPortRects() const
 	{
-		return GetPortRects(rc_.left, rc_.top, rc_.bottom, (int)insRect_.size());
+		auto insRect_ = GetPortRects(rc_.left, rc_.top, rc_.bottom, Access::GetUserFilterImpl(*userFilter_).ins_);
+		return insRect_;
 	}
-	std::vector<CRect> GetOutPortRects() const
+	
+	CRect GetInPortRect(CString const& name) const
 	{
-		return GetPortRects(rc_.right, rc_.top, rc_.bottom, (int)outsRect_.size());
-	}
-
-	CPoint GetInPortCenter(size_t i) const
-	{
-		auto rects = GetPortRects(rc_.left, rc_.top, rc_.bottom, (int)insRect_.size());
-		return rects[i].CenterPoint();
+		auto insRect_ = GetPortRect(rc_.left, rc_.top, rc_.bottom, Access::GetUserFilterImpl(*userFilter_).ins_.size(), 
+			Access::GetUserFilterImpl(*userFilter_).GetInputIndex(name));
+		return insRect_;
 	}
 
-	CPoint GetOutPortCenter(size_t i) const
+	std::map<CString, CRect> GetOutPortRects() const
 	{
-		auto rects = GetPortRects(rc_.right, rc_.top, rc_.bottom, (int)outsRect_.size());
-		return rects[i].CenterPoint();
+		auto outsRect_ = GetPortRects(rc_.right, rc_.top, rc_.bottom, Access::GetUserFilterImpl(*userFilter_).outs_);
+		return outsRect_;
+	}
+
+	CRect GetOutPortRect(CString const& name) const
+	{
+		auto insRect_ = GetPortRect(rc_.right, rc_.top, rc_.bottom, Access::GetUserFilterImpl(*userFilter_).outs_.size(),
+			Access::GetUserFilterImpl(*userFilter_).GetOutputIndex(name));
+		return insRect_;
+	}
+
+	CPoint GetInPortCenter(CString const& i) const
+	{
+		return GetInPortRect(i).CenterPoint();
+	}
+
+	CPoint GetOutPortCenter(CString const& i) const
+	{
+		return GetOutPortRect(i).CenterPoint();
 	}
 
 	HitTestResult HitTest(CPoint pt) const
@@ -258,26 +280,24 @@ public:
 		const auto& b = *this;
 
 		{
-			auto ins = b.GetInPortRects();
-			for (int j = 0; j < ins.size(); j++)
+			for (const auto& b: b.GetInPortRects())
 			{
-				const auto& rc = ins[j];
+				const auto& rc = b.second;
 
 				if (PtInRect(rc, pt))
 				{
-					return HitTestResult( 0, HitTestResult::Type::InPort, j );
+					return HitTestResult( 0, HitTestResult::Type::InPort, b.first );
 				}
 			}
 		}
 
 		{
-			auto outs = b.GetOutPortRects();
-			for (int j = 0; j < outs.size(); j++)
+			for (const auto& b : b.GetOutPortRects())
 			{
-				const auto& rc = outs[j];
+				const auto& rc = b.second;
 				if (PtInRect(rc, pt))
 				{
-					return HitTestResult( 0, HitTestResult::Type::OutPort, j );
+					return HitTestResult( 0, HitTestResult::Type::OutPort, b.first);
 				}
 			}
 		}
@@ -285,7 +305,7 @@ public:
 		{
 			if (PtInRect(b.GetRect(), pt))
 			{
-				return HitTestResult( 0, HitTestResult::Type::Block, -1 );
+				return HitTestResult( 0, HitTestResult::Type::Block, CString() );
 			}
 		}
 		
@@ -306,19 +326,6 @@ void Line(CDC* pDC, CString const& type, CPoint const& pt1, CPoint const& pt2, d
 	pDC->LineTo(pt2);
 	pDC->SelectObject(old);
 }
-
-//std::vector<Port> MakePorts(const char* prefix, int n)
-//{
-//	std::vector<Port> ret;
-//	for (int i = 0; i < n; i++)
-//	{
-//		CString name;
-//		name.Format("%s %d", prefix, i);
-//		CString type; type.Format("type%d", i%2);
-//		ret.emplace_back(Port{ name , type });
-//	}
-//	return ret;
-//}
 
 CString MyFormat(const char* fmt, ...)
 {
@@ -413,13 +420,13 @@ struct Test
 	struct Connection
 	{
 		CString srcBlockName;
-		int srcBlockPortIdx = 0;
+		CString srcBlockPortIdx;
 
 		CString dstBlockName;
-		int dstBlockPortIdx = 0;
+		CString dstBlockPortIdx;
 
 		Connection() {}
-		Connection(CString const& srcBlockName_, int srcBlockPortIdx_, CString const& dstBlockName_, int dstBlockPortIdx_)
+		Connection(CString const& srcBlockName_, CString const& srcBlockPortIdx_, CString const& dstBlockName_, CString const& dstBlockPortIdx_)
 		:srcBlockName(srcBlockName_), srcBlockPortIdx(srcBlockPortIdx_)
 			, dstBlockName(dstBlockName_), dstBlockPortIdx(dstBlockPortIdx_)
 		{}
@@ -550,7 +557,7 @@ struct Test
 		{}
 	};
 
-	ConnectResult Connect(const CString& srcBlockName, int srcBlockPortIdx, const CString& dstBlockName, int dstBlockPortIdx)
+	ConnectResult Connect(const CString& srcBlockName, const CString& srcBlockPortIdx, const CString& dstBlockName, const CString& dstBlockPortIdx)
 	{
 		if (srcBlockName == dstBlockName)
 		{
@@ -626,8 +633,14 @@ struct Test
 		}
 		return HitTestResult();
 	}
+	void DeleteInPort(CString const& blockName_, const CString& portIndx_)
+	{
+		RemoveConnetionWithDestination(blockName_, portIndx_);
+		//blocks.at(blockName_).
+		//FIXME, need low level support
+	}
 
-	void RemoveConnetionWithDestination(CString const& blockName_, int portIndx_)
+	void RemoveConnetionWithDestination(CString const& blockName_, const CString& portIndx_)
 	{
 		auto isSame = [blockName_, portIndx_](Connection const& c)->bool {
 			return c.dstBlockName == blockName_ && c.dstBlockPortIdx == portIndx_;
@@ -642,7 +655,7 @@ struct Test
 
 	}
 
-	void RemoveConnetionWithSource(CString const& blockName_, int portIndx_)
+	void RemoveConnetionWithSource(CString const& blockName_, const CString& portIndx_)
 	{
 		auto isSame = [blockName_, portIndx_](Connection const& c)->bool {
 			return c.srcBlockName == blockName_ && c.srcBlockPortIdx == portIndx_;
@@ -806,6 +819,9 @@ struct Test
 				break;
 				case ID_BLOCK_ADDTERMINAL:
 					AfxMessageBox("Not impl");
+					CMemberBrowserDlg dlg;
+					dlg.inTypeName_ = "Window";
+					dlg.DoModal();
 				break;
 			}
 			break;
@@ -817,7 +833,7 @@ struct Test
 			{
 				case ID_PIN_DELETE:
 				// FIXME: Need use pin name instead of index for efficient deletion
-					AfxMessageBox("Not impl");
+				DeleteInPort(hitTest.blockName_, hitTest.portIndx_);
 				break;
 				case ID_PIN_DELETECONNECTION:
 				RemoveConnetionWithDestination(hitTest.blockName_, hitTest.portIndx_);

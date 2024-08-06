@@ -23,6 +23,41 @@ public:
 
 	}
 
+	const Port& GetInput(const char* name) const
+	{
+		auto it = std::find_if(ins_.begin(), ins_.end(), [name](Port const& p) {return p.name == name; });
+		assert(it != ins_.end());
+		return *it;
+	}
+
+	Port& GetInput(const char* name)
+	{
+		auto it = std::find_if(ins_.begin(), ins_.end(), [name](Port const& p) {return p.name == name; });
+		assert(it != ins_.end());
+		return *it;
+	}
+
+	size_t GetInputIndex(const char* name) const
+	{
+		auto it = std::find_if(ins_.begin(), ins_.end(), [name](Port const& p) {return p.name == name; });
+		assert(it != ins_.end());
+		return it - ins_.begin();
+	}
+
+	const Port& GetOutput(const char* name) const
+	{
+		auto it = std::find_if(outs_.begin(), outs_.end(), [name](Port const& p) {return p.name == name; });
+		assert(it != outs_.end());
+		return *it;
+	}
+
+	size_t GetOutputIndex(const char* name) const
+	{
+		auto it = std::find_if(outs_.begin(), outs_.end(), [name](Port const& p) {return p.name == name; });
+		assert(it != outs_.end());
+		return it - outs_.begin();
+	}
+
 	void SetName(const char* name)
 	{
 		name_ = name;

@@ -54,6 +54,12 @@
     <ClInclude Include="InpuParaDlg.h">
       <Filter>头文件</Filter>
     </ClInclude>
+    <ClInclude Include="MemberBrowserDlg.h">
+      <Filter>头文件</Filter>
+    </ClInclude>
+    <ClInclude Include="TypeComposition.h">
+      <Filter>源文件</Filter>
+    </ClInclude>
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="MFCApplication1.cpp">
@@ -81,6 +87,15 @@
       <Filter>源文件</Filter>
     </ClCompile>
     <ClCompile Include="InpuParaDlg.cpp">
+      <Filter>源文件</Filter>
+    </ClCompile>
+    <ClCompile Include="UserFilterEngine.cpp">
+      <Filter>源文件</Filter>
+    </ClCompile>
+    <ClCompile Include="MemberBrowserDlg.cpp">
+      <Filter>源文件</Filter>
+    </ClCompile>
+    <ClCompile Include="TypeComposition.cpp">
       <Filter>源文件</Filter>
     </ClCompile>
   </ItemGroup>

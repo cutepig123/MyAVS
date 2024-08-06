@@ -50,6 +50,7 @@ public:
 	afx_msg void OnButtonFilter();
 	void AddBlock(const char* name);
 	afx_msg void OnRButtonDblClk(UINT nFlags, CPoint point);
+	afx_msg void OnContextMenu(CWnd* /*pWnd*/, CPoint /*point*/);
 };
 
 #ifndef _DEBUG  // MFCApplication1View.cpp 中的调试版本

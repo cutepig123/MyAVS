@@ -396,6 +396,16 @@ auto end(reversion_wrapper<T> w) { return std::rend(w.iterable); }
 template <typename T>
 reversion_wrapper<T> reverse(T&& iterable) { return{ iterable }; }
 
+long PopupMenu(CWnd* pWnd, long ID, CPoint point)
+{
+	CMenu menu;
+	menu.LoadMenu(ID);
+
+	CMenu *pPopup = menu.GetSubMenu(0);
+
+	long command = pPopup->TrackPopupMenu(TPM_LEFTALIGN | TPM_TOPALIGN | TPM_NONOTIFY | TPM_RETURNCMD, point.x, point.y, pWnd);
+	return command;
+}
 struct Test
 {
 	std::map<CString, Block> blocks;
@@ -563,7 +573,7 @@ struct Test
 		if (it != conns_.end())
 			return ConnectResult( false, "Already have source connected" );
 
-		// blockÖ®ég²»ÄÜÓÐÑ­­hæœ½Ó
+		// blockÖ®ï¿½gï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Ñ­ï¿½hæœ½ï¿½
 		auto successors = GetAllSuccessorNodes(dstBlockName);
 		if (std::find(successors.begin(), successors.end(), srcBlockName) != successors.end())
 		{
@@ -622,11 +632,30 @@ struct Test
 		auto isSame = [blockName_, portIndx_](Connection const& c)->bool {
 			return c.dstBlockName == blockName_ && c.dstBlockPortIdx == portIndx_;
 			};
-		auto it = std::find_if(conns_.begin(), conns_.end(), isSame);
-		if (it!= conns_.end())
+		for (auto it = conns_.begin(); it != conns_.end();)
 		{
-			conns_.erase(it);
+			if (isSame(*it))
+				it = conns_.erase(it);
+			else
+				++it;
 		}
+
+	}
+
+	void RemoveConnetionWithSource(CString const& blockName_, int portIndx_)
+	{
+		auto isSame = [blockName_, portIndx_](Connection const& c)->bool {
+			return c.srcBlockName == blockName_ && c.srcBlockPortIdx == portIndx_;
+		};
+
+		for (auto it=conns_.begin(); it!= conns_.end();)
+		{
+			if (isSame(*it))
+				it = conns_.erase(it);
+			else
+				++it;
+		}
+		
 	}
 
 	void DeleteBlock(CString const& blockName)
@@ -758,6 +787,68 @@ struct Test
 			tooltip.Show(text, ptScreen);
 		}
 	}
+
+	void ContextMenu(CWnd* pWnd, CPoint const& point)
+	{
+		CPoint ptScreen = point;
+		pWnd->ClientToScreen(&ptScreen);
+		HitTestResult hitTest = HitTest(point);
+		
+		switch (hitTest.type_)
+		{
+		case HitTestResult::Type::Block:
+		{
+			long id = PopupMenu(pWnd, IDR_MENU_BLOCK, ptScreen);
+			switch(id)
+			{
+				case ID_BLOCK_DELETE:
+				DeleteBlock(hitTest.blockName_);
+				break;
+				case ID_BLOCK_ADDTERMINAL:
+					AfxMessageBox("Not impl");
+				break;
+			}
+			break;
+		}
+		case HitTestResult::Type::InPort:
+		{
+			long id = PopupMenu(pWnd, IDR_MENU_PIN, ptScreen);
+			switch(id)
+			{
+				case ID_PIN_DELETE:
+				// FIXME: Need use pin name instead of index for efficient deletion
+					AfxMessageBox("Not impl");
+				break;
+				case ID_PIN_DELETECONNECTION:
+				RemoveConnetionWithDestination(hitTest.blockName_, hitTest.portIndx_);
+				break;
+			}
+
+			break;
+		}
+		case HitTestResult::Type::OutPort:
+		{
+			long id = PopupMenu(pWnd, IDR_MENU_PIN, ptScreen);
+			switch(id)
+			{
+				case ID_PIN_DELETE:
+				// FIXME: Need use pin name instead of index for efficient deletion
+					AfxMessageBox("Not impl");
+				break;
+				case ID_PIN_DELETECONNECTION:
+				RemoveConnetionWithSource(hitTest.blockName_, hitTest.portIndx_);
+				break;
+			}
+
+			break;
+		}
+		
+		default:
+			break;
+		}
+
+		pWnd->RedrawWindow();
+	}
 };
 
 std::unique_ptr<Test> g_test;
@@ -785,11 +876,16 @@ void Eng_OnLButtonDblClk(CWnd* pWnd, CPoint point)
 
 void Eng_OnButtonRun()
 {
-	// TODO: ÔÚ´ËÌí¼ÓÃüÁî´¦Àí³ÌÐò´úÂë
+	// TODO: ï¿½Ú´ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½î´¦ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½
 	g_test->Invoke();
 }
 
 void Eng_AddBlock(const char* name)
 {
 	g_test->AddBlock(name);
+}
+
+void Eng_ContextMenu(CWnd* pWnd, CPoint const& point)
+{
+	g_test->ContextMenu(pWnd, point);
 }

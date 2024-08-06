@@ -44,6 +44,7 @@ BEGIN_MESSAGE_MAP(CMFCApplication1View, CView)
 	ON_COMMAND(ID_BUTTON_RUN, &CMFCApplication1View::OnButtonRun)
 	ON_COMMAND(IDC_BUTTON_FILTER, &CMFCApplication1View::OnButtonFilter)
 	ON_WM_RBUTTONDBLCLK()
+	ON_WM_CONTEXTMENU()
 END_MESSAGE_MAP()
 
 // CMFCApplication1View 构造/析构
@@ -198,4 +199,12 @@ void CMFCApplication1View::OnRButtonDblClk(UINT nFlags, CPoint point)
 	// TODO: Add your message handler code here and/or call default
 
 	CView::OnRButtonDblClk(nFlags, point);
+}
+
+
+void CMFCApplication1View::OnContextMenu(CWnd* /*pWnd*/, CPoint point)
+{
+	// TODO: Add your message handler code here
+	ScreenToClient(&point);
+	Eng_ContextMenu(this, point);
 }

@@ -188,6 +188,7 @@
     <ClInclude Include="framework.h" />
     <ClInclude Include="InpuParaDlg.h" />
     <ClInclude Include="MainFrm.h" />
+    <ClInclude Include="MemberBrowserDlg.h" />
     <ClInclude Include="MFCApplication1.h" />
     <ClInclude Include="MFCApplication1Doc.h" />
     <ClInclude Include="MFCApplication1View.h" />
@@ -196,12 +197,14 @@
     <ClInclude Include="Resource.h" />
     <ClInclude Include="stdafx.h" />
     <ClInclude Include="targetver.h" />
+    <ClInclude Include="TypeComposition.h" />
     <ClInclude Include="userfilter.h" />
     <ClInclude Include="userfilterimpl.h" />
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="InpuParaDlg.cpp" />
     <ClCompile Include="MainFrm.cpp" />
+    <ClCompile Include="MemberBrowserDlg.cpp" />
     <ClCompile Include="MFCApplication1.cpp" />
     <ClCompile Include="MFCApplication1Doc.cpp" />
     <ClCompile Include="MFCApplication1View.cpp" />
@@ -212,6 +215,7 @@
       <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">Create</PrecompiledHeader>
       <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Release|x64'">Create</PrecompiledHeader>
     </ClCompile>
+    <ClCompile Include="TypeComposition.cpp" />
     <ClCompile Include="UserFilter.cpp" />
     <ClCompile Include="userfilterAdd.cpp" />
     <ClCompile Include="UserFilterEngine.cpp" />

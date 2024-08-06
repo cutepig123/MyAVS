@@ -4,6 +4,7 @@
 #include "MainFrm.h"
 #include "MyDlgBar.h"
 #include "userfilter.h"
+#include "MemberBrowserDlg.h"
 #include <algorithm>
 #include <iterator>
 // CMyDlgBar
@@ -43,7 +44,7 @@ bool findStringIC(const std::string& strHaystack, const std::string& strNeedle)
 	auto it = std::search(
 		strHaystack.begin(), strHaystack.end(),
 		strNeedle.begin(), strNeedle.end(),
-		[](unsigned char ch1, unsigned char ch2) { return std::toupper(ch1) == std::toupper(ch2); }
+		[](unsigned char ch1, unsigned char ch2) { return toupper(ch1) == toupper(ch2); }
 	);
 	return (it != strHaystack.end());
 }
@@ -74,6 +75,10 @@ LRESULT CMyDlgBar::OnInitDialog(WPARAM wParam, LPARAM lParam)
 
 	
 	UpdateList(m_listCtrl, "");
+
+	CMemberBrowserDlg dlg;
+	dlg.inTypeName_ = "Window";
+	dlg.DoModal();
 
 	return bRet;
 }

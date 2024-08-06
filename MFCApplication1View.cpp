@@ -18,7 +18,6 @@
 #include "userfilterimpl.h"
 #include "UserFilterEngine.h"
 #include <vector>
-#include <optional>
 #include <deque>
 #include <map>
 #include <set>
@@ -45,6 +44,7 @@ BEGIN_MESSAGE_MAP(CMFCApplication1View, CView)
 	ON_COMMAND(ID_BUTTON_RUN, &CMFCApplication1View::OnButtonRun)
 	ON_COMMAND(IDC_BUTTON_FILTER, &CMFCApplication1View::OnButtonFilter)
 	ON_WM_RBUTTONDBLCLK()
+	ON_WM_CONTEXTMENU()
 END_MESSAGE_MAP()
 
 // CMFCApplication1View 构造/析构
@@ -148,7 +148,7 @@ int CMFCApplication1View::OnCreate(LPCREATESTRUCT lpCreateStruct)
 		return -1;
 
 	// TODO:  在此添加您专用的创建代码
-	
+
 	return 0;
 }
 
@@ -199,4 +199,12 @@ void CMFCApplication1View::OnRButtonDblClk(UINT nFlags, CPoint point)
 	// TODO: Add your message handler code here and/or call default
 
 	CView::OnRButtonDblClk(nFlags, point);
+}
+
+
+void CMFCApplication1View::OnContextMenu(CWnd* /*pWnd*/, CPoint point)
+{
+	// TODO: Add your message handler code here
+	ScreenToClient(&point);
+	Eng_ContextMenu(this, point);
 }

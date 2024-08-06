@@ -1,6 +1,7 @@
 #pragma once
 #include "resource.h"
 
+
 // CMyDlgBar
 
 class CMyDlgBar : public CDialogBar

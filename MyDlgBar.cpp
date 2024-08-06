@@ -38,20 +38,29 @@ void CMyDlgBar::DoDataExchange(CDataExchange* pDX)
 	
 }
 
-void UpdateList(CListCtrl& m_listCtrl, const char* filter)
+bool findStringIC(const std::string& strHaystack, const std::string& strNeedle)
+{
+	auto it = std::search(
+		strHaystack.begin(), strHaystack.end(),
+		strNeedle.begin(), strNeedle.end(),
+		[](unsigned char ch1, unsigned char ch2) { return toupper(ch1) == toupper(ch2); }
+	);
+	return (it != strHaystack.end());
+}
+
+void UpdateList(CListCtrl& m_listCtrl, const std::string& filter)
 {
 	auto all = GetAllUserFilters();
 
 	m_listCtrl.DeleteAllItems();
 	int index = 0;
-	std::for_each(all.begin(), all.end(), 
-		[&m_listCtrl, filter, &index](std::string const& t) {
-		if (!filter || t.find(filter)!=t.npos)
+	for(const auto& t: all)
+	{
+		if (filter.empty() || findStringIC(t, filter))
 		{
 			m_listCtrl.InsertItem(index++, t.c_str());
 		}
-	});
-	
+	}
 }
 
 LRESULT CMyDlgBar::OnInitDialog(WPARAM wParam, LPARAM lParam)
@@ -63,14 +72,17 @@ LRESULT CMyDlgBar::OnInitDialog(WPARAM wParam, LPARAM lParam)
 		TRACE0("Warning: UpdateData failed during dialog init.\n");
 	}
 
-	UpdateList(m_listCtrl, nullptr);
+	
+	UpdateList(m_listCtrl, "");
 
 	return bRet;
 }
 
 void CMyDlgBar::OnBnClickedButtonFilter()
 {
-	m_edit.SetWindowTextA("XXX");
+	CString text;
+	m_edit.GetWindowTextA(text);
+	UpdateList(m_listCtrl, (const char*)text);
 }
 
 void CMyDlgBar::OnClickListBlocks(NMHDR * /* pNMHDR */, LRESULT *pResult)

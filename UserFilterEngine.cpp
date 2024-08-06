@@ -10,6 +10,7 @@
 #include "userfilterimpl.h"
 #include <vector>
 #include <deque>
+#include <iterator>
 #include <map>
 #include <set>
 
@@ -120,13 +121,13 @@ CRect GetPortRect(int x, int top, int btm, size_t numPorts, size_t currentPortIn
 	
 }
 
-std::map<CString, CRect> GetPortRects(int x, int top, int btm, std::vector<UserFilterImpl::Port> const& ports)
+std::map<CString, CRect> GetPortRects(int x, int top, int btm, std::vector<CString> const& ports)
 {
 	size_t num = ports.size();
 	std::map<CString, CRect> ret;
 	for (size_t i = 0; i < num; i++)
 	{
-		ret[ports.at(i).name.c_str()] = GetPortRect(x, top, btm, num, i);
+		ret[ports.at(i)] = GetPortRect(x, top, btm, num, i);
 	}
 	return ret;
 }
@@ -152,13 +153,49 @@ class Block
 {
 	CRect rc_;
 	std::unique_ptr<UserFilter> userFilter_;
-
+	std::vector<CString> ui_ins_;
+	std::vector<CString> ui_outs_;
 public:
 	Block(){}
 
 	Block(CRect const& rect, std::unique_ptr<UserFilter>&& userFilter)
 		:rc_(rect), userFilter_(std::move(userFilter))
 	{
+		auto& impl = getRawObj();
+		
+		std::transform(impl.ins_.ports_.begin(), impl.ins_.ports_.end(), std::back_inserter(ui_ins_),
+			[](UserFilterImpl::Port const& p)->CString {return p.name.c_str(); });
+		std::transform(impl.outs_.ports_.begin(), impl.outs_.ports_.end(), std::back_inserter(ui_outs_),
+			[](UserFilterImpl::Port const& p)->CString {return p.name.c_str(); });
+	}
+
+	void AddInput(const char* name)
+	{
+		if (std::find(ui_ins_.begin(), ui_ins_.end(), name) == ui_ins_.end())
+			ui_ins_.push_back(name);
+	}
+
+	void AddOutput(const char* name)
+	{
+		if (std::find(ui_outs_.begin(), ui_outs_.end(), name) == ui_outs_.end())
+			ui_outs_.push_back(name);
+	}
+
+	void DeleteInport(const char* name)
+	{
+		auto it = std::find(ui_ins_.begin(), ui_ins_.end(), name);
+		if (it!= ui_ins_.end())
+		{
+			ui_ins_.erase(it);
+		}
+	}
+	void DeleteOutport(const char* name)
+	{
+		auto it = std::find(ui_outs_.begin(), ui_outs_.end(), name);
+		if (it != ui_outs_.end())
+		{
+			ui_outs_.erase(it);
+		}
 	}
 
 	void Invoke()
@@ -168,7 +205,7 @@ public:
 
 	CString title() const
 	{
-		return Access::GetUserFilterImpl(*userFilter_).name_.c_str();
+		return getRawObj().name_.c_str();
 	}
 
 	CPoint CenterPoint() const
@@ -183,10 +220,10 @@ public:
 		pDC->TextOut(rc_.left+5, rc_.top+5, title());
 
 		// Ins
-		for (const auto&i: GetInPortRects())
+		for (const auto&i: ui_ins_)
 		{
-			const auto& rc = i.second;
-			const auto& port = Access::GetUserFilterImpl(*userFilter_).GetInput(i.first);
+			const auto rc = GetInPortRect(i);
+			const auto& port = getRawObj().ins_.GetByName(i);
 			CPen pen(PS_SOLID, 1, GetColorByType(port.type.c_str()));
 			auto old = pDC->SelectObject(pen);
 			pDC->Rectangle(rc);
@@ -195,10 +232,10 @@ public:
 		}
 
 		// Outs
-		for (const auto& i : GetOutPortRects())
+		for (const auto& i : ui_outs_)
 		{
-			const auto& rc = i.second;
-			const auto& port = Access::GetUserFilterImpl(*userFilter_).GetOutput(i.first);
+			const auto& rc = GetOutPortRect(i);
+			const auto& port = getRawObj().outs_.GetByName(i);
 			CPen pen(PS_SOLID, 1, GetColorByType(port.type.c_str()));
 			auto old = pDC->SelectObject(pen);
 			pDC->Rectangle(rc);
@@ -226,42 +263,42 @@ public:
 
 	const UserFilterImpl::Port& GetInPort(const char* i) const
 	{
-		return Access::GetUserFilterImpl(*userFilter_).GetInput(i);
+		return getRawObj().ins_.GetByName(i);
 	}
 
-	UserFilterImpl::Port& GetInPort(const char* i)
+	UserFilterImpl& getRawObj()
 	{
-		return Access::GetUserFilterImpl(*userFilter_).GetInput(i);
+		return Access::GetUserFilterImpl(*userFilter_);
 	}
 
-	const UserFilterImpl::Port& GetOutPort(const char* i) const
+	UserFilterImpl& getRawObj() const
 	{
-		return Access::GetUserFilterImpl(*userFilter_).GetOutput(i);
+		return Access::GetUserFilterImpl(*userFilter_);
 	}
-
+	
 	std::map<CString, CRect> GetInPortRects() const
 	{
-		auto insRect_ = GetPortRects(rc_.left, rc_.top, rc_.bottom, Access::GetUserFilterImpl(*userFilter_).ins_);
+		auto insRect_ = GetPortRects(rc_.left, rc_.top, rc_.bottom, ui_ins_);
 		return insRect_;
 	}
 	
 	CRect GetInPortRect(CString const& name) const
 	{
-		auto insRect_ = GetPortRect(rc_.left, rc_.top, rc_.bottom, Access::GetUserFilterImpl(*userFilter_).ins_.size(), 
-			Access::GetUserFilterImpl(*userFilter_).GetInputIndex(name));
+		auto index = std::find(ui_ins_.begin(), ui_ins_.end(), name) - ui_ins_.begin();
+		auto insRect_ = GetPortRect(rc_.left, rc_.top, rc_.bottom, ui_ins_.size(), index);
 		return insRect_;
 	}
 
 	std::map<CString, CRect> GetOutPortRects() const
 	{
-		auto outsRect_ = GetPortRects(rc_.right, rc_.top, rc_.bottom, Access::GetUserFilterImpl(*userFilter_).outs_);
+		auto outsRect_ = GetPortRects(rc_.right, rc_.top, rc_.bottom, ui_outs_);
 		return outsRect_;
 	}
 
 	CRect GetOutPortRect(CString const& name) const
 	{
-		auto insRect_ = GetPortRect(rc_.right, rc_.top, rc_.bottom, Access::GetUserFilterImpl(*userFilter_).outs_.size(),
-			Access::GetUserFilterImpl(*userFilter_).GetOutputIndex(name));
+		auto index = std::find(ui_outs_.begin(), ui_outs_.end(), name) - ui_outs_.begin();
+		auto insRect_ = GetPortRect(rc_.right, rc_.top, rc_.bottom, ui_outs_.size(), index);
 		return insRect_;
 	}
 
@@ -504,8 +541,8 @@ struct Test
 				if (conn.srcBlockName == currentName)
 				{
 					// Update successor Inputs
-					blocks.at(conn.dstBlockName).GetInPort(conn.dstBlockPortIdx).value
-						= blocks.at(conn.srcBlockName).GetOutPort(conn.srcBlockPortIdx).value;
+					blocks.at(conn.dstBlockName).getRawObj().ins_.Write(conn.dstBlockPortIdx,
+						blocks.at(conn.srcBlockName).getRawObj().outs_.Read(conn.srcBlockPortIdx));
 					// Update successor outstandingInputs
 					outstandingInputs.at(conn.dstBlockName)--;
 					// add to queue if it is ready
@@ -564,8 +601,8 @@ struct Test
 			return ConnectResult( false, "Same block" );
 		}
 		
-		auto type1 = blocks.at(srcBlockName).GetOutPort(srcBlockPortIdx).type;
-		auto type2 = blocks.at(dstBlockName).GetInPort(dstBlockPortIdx).type;
+		auto type1 = blocks.at(srcBlockName).getRawObj().outs_.GetTypeByName(srcBlockPortIdx);
+		auto type2 = blocks.at(dstBlockName).getRawObj().ins_.GetTypeByName(dstBlockPortIdx);
 		if (type1 != type2)
 		{
 			return ConnectResult( false, "Diff type" );
@@ -610,7 +647,7 @@ struct Test
 			auto pt1 = blocks[conn.srcBlockName].GetOutPortCenter(conn.srcBlockPortIdx);
 			auto pt2 = blocks[conn.dstBlockName].GetInPortCenter(conn.dstBlockPortIdx);
 
-			auto type = blocks[conn.srcBlockName].GetOutPort(conn.srcBlockPortIdx).type;
+			auto type = blocks[conn.srcBlockName].getRawObj().outs_.GetTypeByName(conn.srcBlockPortIdx);
 			auto numConn = MyMax(6, (int)conns_.size());
 			double pitch = 0.5 / numConn;
 			Line(pDC, type.c_str(), pt1, pt2, 0.5 + pitch * (-i + numConn * 0.5));
@@ -636,8 +673,13 @@ struct Test
 	void DeleteInPort(CString const& blockName_, const CString& portIndx_)
 	{
 		RemoveConnetionWithDestination(blockName_, portIndx_);
-		//blocks.at(blockName_).
-		//FIXME, need low level support
+		blocks.at(blockName_).DeleteInport(portIndx_);
+	}
+
+	void DeleteOutPort(CString const& blockName_, const CString& portIndx_)
+	{
+		RemoveConnetionWithSource(blockName_, portIndx_);
+		blocks.at(blockName_).DeleteOutport(portIndx_);
 	}
 
 	void RemoveConnetionWithDestination(CString const& blockName_, const CString& portIndx_)
@@ -759,48 +801,6 @@ struct Test
 		}
 	}
 
-	void ShowToolTip(MyToolTip& tooltip, CWnd*pWnd, CPoint pt)
-	{
-		HitTestResult hitTest = HitTest(pt);
-		CString text;
-
-		switch (hitTest.type_)
-		{
-		case HitTestResult::Type::Block:
-		{
-			auto const& b = blocks[hitTest.blockName_];
-			text = b.title();
-			break;
-		}
-		case HitTestResult::Type::OutPort:
-		{
-			auto const& b = blocks[hitTest.blockName_];
-			const auto& p = b.GetOutPort(hitTest.portIndx_);
-			text.Format("%s %s %s", b.title(), p.name, p.type);
-			break;
-		}
-		case HitTestResult::Type::InPort:
-		{
-			auto const& b = blocks[hitTest.blockName_];
-			const auto& p = b.GetInPort(hitTest.portIndx_);
-			text.Format("%s %s %s", b.title(), p.name, p.type);
-			break;
-		}
-		default:
-			tooltip.Hide();
-			break;
-		}
-
-		if (!text.IsEmpty())
-		{
-			CPoint ptScreen = pt;
-			pWnd->ClientToScreen(&ptScreen);
-			ptScreen.x -= 15;
-			ptScreen.y -= 45;
-			tooltip.Show(text, ptScreen);
-		}
-	}
-
 	void ContextMenu(CWnd* pWnd, CPoint const& point)
 	{
 		CPoint ptScreen = point;
@@ -818,10 +818,19 @@ struct Test
 				DeleteBlock(hitTest.blockName_);
 				break;
 				case ID_BLOCK_ADDTERMINAL:
-					AfxMessageBox("Not impl");
 					CMemberBrowserDlg dlg;
-					dlg.inTypeName_ = "Window";
-					dlg.DoModal();
+					dlg.UserFilter_ = &blocks.at(hitTest.blockName_).getRawObj();
+					if (IDOK == dlg.DoModal())
+					{
+						if (dlg.retIsInput_)
+						{
+							blocks.at(hitTest.blockName_).AddInput(dlg.retPath_);
+						}
+						else
+						{
+							blocks.at(hitTest.blockName_).AddOutput(dlg.retPath_);
+						}
+					}
 				break;
 			}
 			break;
@@ -832,7 +841,6 @@ struct Test
 			switch(id)
 			{
 				case ID_PIN_DELETE:
-				// FIXME: Need use pin name instead of index for efficient deletion
 				DeleteInPort(hitTest.blockName_, hitTest.portIndx_);
 				break;
 				case ID_PIN_DELETECONNECTION:
@@ -848,8 +856,7 @@ struct Test
 			switch(id)
 			{
 				case ID_PIN_DELETE:
-				// FIXME: Need use pin name instead of index for efficient deletion
-					AfxMessageBox("Not impl");
+					DeleteOutPort(hitTest.blockName_, hitTest.portIndx_);
 				break;
 				case ID_PIN_DELETECONNECTION:
 				RemoveConnetionWithSource(hitTest.blockName_, hitTest.portIndx_);

@@ -19,3 +19,34 @@ struct Field
 
 int RegisterType(const char* name, std::set<std::string> const& children);
 const std::set<Field>& GetTypeItems(const char* name);
+
+// class Object
+// {
+// 	Object* get(name);
+// 	string type;
+// };
+
+// class NumObject:Object
+// {
+// 	double t;
+// 	Object* get(name);//assert name==""
+// 	string type;
+// }
+
+// class StringObject:Object
+// {
+// 	double t;
+// 	Object* get(name);//assert name==""
+// }
+
+// class CompositionObject:Object
+// {
+// 	map<string, Object*> fiels;
+
+// 	Object* get(name);
+// 		Object* p=this;
+// 		for x in name.split('.'):
+// 			p = p->get(x)
+// 		return p;
+// 	string type;
+// }

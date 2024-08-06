@@ -1,4 +1,5 @@
 #pragma once
+#include  "userfilter.h"
 #include <string>
 #include <vector>
 #include <assert.h>
@@ -15,47 +16,59 @@ public:
 		std::string type;
 		std::string value;
 	};
-	std::vector<Port> ins_;
-	std::vector<Port> outs_;
+
+	struct Ports
+	{
+		std::vector<Port> ports_;
+	
+		std::string GetTypeByName(const char* name) const
+		{
+			auto it = std::find_if(ports_.begin(), ports_.end(), [name](Port const& p) {return p.name == name; });
+			assert(it != ports_.end());
+			return it->type;
+		}
+
+		const Port& GetByName(const char* name) const
+		{
+			auto it = std::find_if(ports_.begin(), ports_.end(), [name](Port const& p) {return p.name == name; });
+			assert(it != ports_.end());
+			return *it;
+		}
+
+		size_t GetIndex(const char* name) const
+		{
+			auto it = std::find_if(ports_.begin(), ports_.end(), [name](Port const& p) {return p.name == name; });
+			assert(it != ports_.end());
+			return it - ports_.begin();
+		}
+
+		void Add(const char* name, const char* type, const std::string& default_value)
+		{
+			assert(std::find_if(ports_.begin(), ports_.end(), [name](Port const& p) {return p.name == name; }) == ports_.end());
+			ports_.push_back(Port{ name, type, default_value });
+		}
+
+		std::string Read(const char* name) const
+		{
+			auto it = std::find_if(ports_.begin(), ports_.end(), [name](Port const& p) {return p.name == name; });
+			assert(it != ports_.end());
+			return it->value;
+		}
+
+		void Write(const char* name, std::string const& t)
+		{
+			auto it = std::find_if(ports_.begin(), ports_.end(), [name](Port const& p) {return p.name == name; });
+			assert(it != ports_.end());
+			it->value = t;
+		}
+	};
+
+	Ports ins_;
+	Ports outs_;
 
 	UserFilterImpl()
 	{
 
-	}
-
-	const Port& GetInput(const char* name) const
-	{
-		auto it = std::find_if(ins_.begin(), ins_.end(), [name](Port const& p) {return p.name == name; });
-		assert(it != ins_.end());
-		return *it;
-	}
-
-	Port& GetInput(const char* name)
-	{
-		auto it = std::find_if(ins_.begin(), ins_.end(), [name](Port const& p) {return p.name == name; });
-		assert(it != ins_.end());
-		return *it;
-	}
-
-	size_t GetInputIndex(const char* name) const
-	{
-		auto it = std::find_if(ins_.begin(), ins_.end(), [name](Port const& p) {return p.name == name; });
-		assert(it != ins_.end());
-		return it - ins_.begin();
-	}
-
-	const Port& GetOutput(const char* name) const
-	{
-		auto it = std::find_if(outs_.begin(), outs_.end(), [name](Port const& p) {return p.name == name; });
-		assert(it != outs_.end());
-		return *it;
-	}
-
-	size_t GetOutputIndex(const char* name) const
-	{
-		auto it = std::find_if(outs_.begin(), outs_.end(), [name](Port const& p) {return p.name == name; });
-		assert(it != outs_.end());
-		return it - outs_.begin();
 	}
 
 	void SetName(const char* name)
@@ -63,50 +76,34 @@ public:
 		name_ = name;
 	}
 
-	static void Add(std::vector<Port>& ins_, const char* name, const char* type, const std::string& default_value)
-	{
-		assert(std::find_if(ins_.begin(), ins_.end(), [name](Port const& p) {return p.name == name; }) == ins_.end());
-		ins_.push_back(Port{ name, type, default_value });
-	}
-
 	void AddInput(const char* name, const char* type, const std::string& default_value)
 	{
-		Add(ins_, name, type, default_value);
+		ins_.Add(name, type, default_value);
 	}
 
 	void AddOutput(const char* name, const char* type, const std::string& default_value)
 	{
-		Add(outs_, name, type, default_value);
-	}
-
-	static std::string Read(std::vector<Port>& ins_, const char* name)
-	{
-		auto it = std::find_if(ins_.begin(), ins_.end(), [name](Port const& p) {return p.name == name; });
-		assert(it != ins_.end());
-		return it->value;
+		outs_.Add(name, type, default_value);
 	}
 
 	std::string ReadInput(const char* name)
 	{
-		return Read(ins_, name);
-	}
-
-	static void Write(std::vector<Port>& outs_, const char* name, std::string const& t)
-	{
-		auto it = std::find_if(outs_.begin(), outs_.end(), [name](Port const& p) {return p.name == name; });
-		assert(it != outs_.end());
-		it->value = t;
+		return ins_.Read(name);
 	}
 
 	void WriteOutput(const char* name, std::string const& t)
 	{
-		Write(outs_, name, t);
+		outs_.Write(name, t);
 	}
 };
 
 struct Access
 {
 	static UserFilterImpl& GetUserFilterImpl(UserFilter& f)
+	{
+		return *f.impl_;
+	}
+	static const UserFilterImpl& GetUserFilterImpl(UserFilter const& f)
 	{
 		return *f.impl_;
 	}

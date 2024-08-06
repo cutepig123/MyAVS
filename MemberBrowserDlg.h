@@ -1,5 +1,5 @@
 #pragma once
-
+#include "userfilterimpl.h"
 
 // CMemberBrowserDlg dialog
 
@@ -11,7 +11,10 @@ public:
 	CMemberBrowserDlg(CWnd* pParent = NULL);   // standard constructor
 	virtual ~CMemberBrowserDlg();
 
-	CString inTypeName_;
+	UserFilterImpl const *UserFilter_ = nullptr;
+
+	bool retIsInput_ = true;
+	CString retPath_;
 
 // Dialog Data
 #ifdef AFX_DESIGN_TIME
@@ -24,4 +27,5 @@ protected:
 	DECLARE_MESSAGE_MAP()
 public:
 	virtual BOOL OnInitDialog();
+	afx_msg void OnBnClickedOk();
 };

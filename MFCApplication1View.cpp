@@ -12,10 +12,12 @@
 
 #include "MFCApplication1Doc.h"
 #include "MFCApplication1View.h"
+#include "InpuParaDlg.h"
+#include "mainfrm.h"
 #include "userfilter.h"
 #include "userfilterimpl.h"
 #include <vector>
-#include <optional>
+#include <boost/optional.hpp>
 #include <deque>
 #include <map>
 #include <set>
@@ -136,6 +138,12 @@ struct HitTestResult
 	{
 		return type_ != NA;
 	}
+
+	HitTestResult() {}
+
+	HitTestResult(int blockIdx, Type type, int portIndx)
+		:blockIdx_(blockIdx), type_(type), portIndx_(portIndx)
+	{}
 };
 
 class Block
@@ -267,7 +275,7 @@ public:
 
 				if (PtInRect(rc, pt))
 				{
-					return HitTestResult{ 0, HitTestResult::Type::InPort, j };
+					return HitTestResult( 0, HitTestResult::Type::InPort, j );
 				}
 			}
 		}
@@ -279,7 +287,7 @@ public:
 				const auto& rc = outs[j];
 				if (PtInRect(rc, pt))
 				{
-					return HitTestResult{ 0, HitTestResult::Type::OutPort, j };
+					return HitTestResult( 0, HitTestResult::Type::OutPort, j );
 				}
 			}
 		}
@@ -287,7 +295,7 @@ public:
 		{
 			if (PtInRect(b.GetRect(), pt))
 			{
-				return HitTestResult{ 0, HitTestResult::Type::Block, -1 };
+				return HitTestResult( 0, HitTestResult::Type::Block, -1 );
 			}
 		}
 		
@@ -342,10 +350,16 @@ struct Test
 
 		int dstBlockIdx = 0;
 		int dstBlockPortIdx = 0;
+
+		Connection() {}
+		Connection(int srcBlockIdx_, int srcBlockPortIdx_, int dstBlockIdx_, int dstBlockPortIdx_)
+		:srcBlockIdx(srcBlockIdx_), srcBlockPortIdx(srcBlockPortIdx_)
+			, dstBlockIdx(dstBlockIdx_), dstBlockPortIdx(dstBlockPortIdx_)
+		{}
 	};
 	std::vector<Connection> conns_;
 
-	std::optional<HitTestResult> selected_;
+	boost::optional<HitTestResult> selected_;
 
 	Test()
 	{
@@ -359,6 +373,14 @@ struct Test
 
 		//for (int i = 0; i < 3; i++)
 		//	conns_.emplace_back(Connection{ 0,i,1,i });
+	}
+	
+	void AddBlock(const char* name)
+	{
+		int i = 0;
+		int x = 200 + 300 * i, y = 100 + 300 * i;
+		Block block1(CRect(x, y, x + 200, y + 200), CreateFilter(name));
+		blocks.push_back(std::move(block1));
 	}
 
 	void Invoke()
@@ -440,20 +462,24 @@ struct Test
 	{
 		bool succeed = false;
 		CString error;
+
+		ConnectResult(bool succ, CString const& err)
+			:succeed(succ), error(err)
+		{}
 	};
 
 	ConnectResult Connect(int srcBlockIdx, int srcBlockPortIdx, int dstBlockIdx, int dstBlockPortIdx)
 	{
 		if (srcBlockIdx == dstBlockIdx)
 		{
-			return ConnectResult{ false, "Same block" };
+			return ConnectResult( false, "Same block" );
 		}
 		
 		auto type1 = blocks.at(srcBlockIdx).GetOutPort(srcBlockPortIdx).type;
 		auto type2 = blocks.at(dstBlockIdx).GetInPort(dstBlockPortIdx).type;
 		if (type1 != type2)
 		{
-			return ConnectResult{ false, "Diff type" };
+			return ConnectResult( false, "Diff type" );
 		}
 			
 		// a destination cannot have more than one source
@@ -463,18 +489,18 @@ struct Test
 			};
 		auto it = std::find_if(conns_.begin(), conns_.end(), isSame);
 		if (it != conns_.end())
-			return ConnectResult{ false, "Already have source connected" };
+			return ConnectResult( false, "Already have source connected" );
 
 		// block之間不能有循環鏈接
 		auto successors = GetAllSuccessorNodes(dstBlockIdx);
 		if (std::find(successors.begin(), successors.end(), srcBlockIdx) != successors.end())
 		{
-			return ConnectResult{ false, "Circular Dependence" };
+			return ConnectResult( false, "Circular Dependence" );
 		}
 		
 		// insert connection
 		conns_.emplace_back(Connection{ srcBlockIdx , srcBlockPortIdx , dstBlockIdx , dstBlockPortIdx });
-		return ConnectResult{ true, "" };;
+		return ConnectResult( true, "" );
 			
 	}
 
@@ -554,7 +580,14 @@ struct Test
 		}
 	}
 
-	void Delete(CWnd* pWnd, CPoint pt)
+	void DeleteBlock(int blockIdx)
+	{
+		// FIXME: Need save block name instead of block index!
+		// Delete related connections
+		// Delete related blocks
+	}
+
+	void OnLButtonDblClk(CWnd* pWnd, CPoint pt)
 	{
 		HitTestResult hitTest = HitTest(pt);
 		switch (hitTest.type_)
@@ -565,8 +598,15 @@ struct Test
 			pWnd->RedrawWindow();
 			break;
 		}
+		case HitTestResult::Type::Block:
+		{
+			DeleteBlock(hitTest.blockIdx_);
+			pWnd->RedrawWindow();
+			break;
+		}
 		}
 	}
+
 	void LBtnDown(MyToolTip& tooltip, CWnd* pWnd, CPoint pt)
 	{
 		HitTestResult hitTest = HitTest(pt);
@@ -681,6 +721,8 @@ BEGIN_MESSAGE_MAP(CMFCApplication1View, CView)
 	ON_WM_MOUSEMOVE()
 	ON_WM_LBUTTONDBLCLK()
 	ON_COMMAND(ID_BUTTON_RUN, &CMFCApplication1View::OnButtonRun)
+	ON_COMMAND(IDC_BUTTON_FILTER, &CMFCApplication1View::OnButtonFilter)
+	ON_WM_RBUTTONDBLCLK()
 END_MESSAGE_MAP()
 
 // CMFCApplication1View 构造/析构
@@ -802,7 +844,7 @@ void CMFCApplication1View::OnMouseMove(UINT nFlags, CPoint point)
 void CMFCApplication1View::OnLButtonDblClk(UINT nFlags, CPoint point)
 {
 	// TODO: 在此添加消息处理程序代码和/或调用默认值
-	g_test->Delete(this, point);
+	g_test->OnLButtonDblClk(this, point);
 
 	CView::OnLButtonDblClk(nFlags, point);
 }
@@ -812,4 +854,28 @@ void CMFCApplication1View::OnButtonRun()
 	// TODO: 在此添加命令处理程序代码
 	g_test->Invoke();
 	RedrawWindow();
+}
+
+
+void CMFCApplication1View::OnButtonFilter()
+{
+	// TODO: Add your command handler code here
+	//AfxMessageBox("Hello");
+	//CMainFrame *pMainWnd = (CMainFrame *)AfxGetMainWnd();
+	//pMainWnd->m_wndDlgBar.m_edit.SetWindowTextA("IDC_EDIT_FILTER");
+}
+
+
+void CMFCApplication1View::AddBlock(const char* name)
+{
+	g_test->AddBlock(name);
+	RedrawWindow();
+}
+
+
+void CMFCApplication1View::OnRButtonDblClk(UINT nFlags, CPoint point)
+{
+	// TODO: Add your message handler code here and/or call default
+
+	CView::OnRButtonDblClk(nFlags, point);
 }

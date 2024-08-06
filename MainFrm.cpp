@@ -59,10 +59,23 @@ int CMainFrame::OnCreate(LPCREATESTRUCT lpCreateStruct)
 	m_wndStatusBar.SetIndicators(indicators, sizeof(indicators)/sizeof(UINT));
 
 	// TODO: 如果不需要可停靠工具栏，则删除这三行
-	m_wndToolBar.EnableDocking(CBRS_ALIGN_ANY);
-	EnableDocking(CBRS_ALIGN_ANY);
-	DockControlBar(&m_wndToolBar);
+	//m_wndToolBar.EnableDocking(CBRS_ALIGN_ANY);
+	//EnableDocking(CBRS_ALIGN_ANY);
+	//DockControlBar(&m_wndToolBar);
 
+	// m_wndDlgBar is a CDialogBar member of CMainFrame
+	// IDD_DIALOGBAR - Resource ID of the dialog
+	// template. This dialog template should be created
+	// with  the  style  WS_CHILD and no other style.
+	// The template must not have the style WS_VISIBLE.
+	if (!m_wndDlgBar.Create(this, IDD_DIALOGBAR,
+		WS_CHILD | WS_VISIBLE | CBRS_LEFT | CBRS_GRIPPER | CBRS_SIZE_DYNAMIC | CBRS_TOOLTIPS | CBRS_FLYBY, IDD_DIALOGBAR))
+	{
+		TRACE0("Failed to create DlgBar\n");
+		return -1; // Fail to create.
+	}
+	//m_wndDlgBar.EnableDocking(CBRS_ALIGN_ANY);
+	//DockControlBar(&m_wndDlgBar);
 
 	return 0;
 }

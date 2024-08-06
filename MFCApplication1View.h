@@ -3,7 +3,7 @@
 //
 
 #pragma once
-
+#include "MFCApplication1Doc.h"
 
 class CMFCApplication1View : public CView
 {
@@ -47,6 +47,9 @@ public:
 	afx_msg void OnMouseMove(UINT nFlags, CPoint point);
 	afx_msg void OnLButtonDblClk(UINT nFlags, CPoint point);
 	afx_msg void OnButtonRun();
+	afx_msg void OnButtonFilter();
+	void AddBlock(const char* name);
+	afx_msg void OnRButtonDblClk(UINT nFlags, CPoint point);
 };
 
 #ifndef _DEBUG  // MFCApplication1View.cpp 中的调试版本

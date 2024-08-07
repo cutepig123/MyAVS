@@ -4,7 +4,7 @@
 #include "MainFrm.h"
 #include "MyDlgBar.h"
 #include "userfilter.h"
-#include "MemberBrowserDlg.h"
+
 #include <algorithm>
 #include <iterator>
 // CMyDlgBar
@@ -75,10 +75,6 @@ LRESULT CMyDlgBar::OnInitDialog(WPARAM wParam, LPARAM lParam)
 
 	
 	UpdateList(m_listCtrl, "");
-
-	CMemberBrowserDlg dlg;
-	dlg.inTypeName_ = "Window";
-	dlg.DoModal();
 
 	return bRet;
 }

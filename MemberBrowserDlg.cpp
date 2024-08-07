@@ -28,6 +28,7 @@ void CMemberBrowserDlg::DoDataExchange(CDataExchange* pDX)
 
 
 BEGIN_MESSAGE_MAP(CMemberBrowserDlg, CDialogEx)
+	ON_BN_CLICKED(IDOK, &CMemberBrowserDlg::OnBnClickedOk)
 END_MESSAGE_MAP()
 
 
@@ -57,6 +58,21 @@ void AddMeAndAllChildRecursive(CTreeCtrl* pTreeCtrl, HTREEITEM parent, const cha
 	}
 }
 
+void AddUserFilter(CTreeCtrl* pTreeCtrl, HTREEITEM parent, UserFilterImpl const* UserFilter_)
+{
+	auto rootHandle = AddTreeItem(pTreeCtrl, parent, "Input");
+	for (const auto& port : UserFilter_->ins_.ports_)
+	{
+		AddMeAndAllChildRecursive(pTreeCtrl, rootHandle, port.type.c_str(), port.name.c_str());
+	}
+
+	rootHandle = AddTreeItem(pTreeCtrl, parent, "Output");
+	for (const auto& port : UserFilter_->outs_.ports_)
+	{
+		AddMeAndAllChildRecursive(pTreeCtrl, rootHandle, port.type.c_str(), port.name.c_str());
+	}
+}
+
 void ExpandTreeItem(CTreeCtrl* pTreeCtrl, HTREEITEM hItem)
 {
 	// 展开当前节点
@@ -77,10 +93,49 @@ BOOL CMemberBrowserDlg::OnInitDialog()
 
 	// TODO:  Add extra initialization here
 	CTreeCtrl* pTreeCtrl = (CTreeCtrl*)GetDlgItem(IDC_TREE1);
-	AddMeAndAllChildRecursive(pTreeCtrl, TVI_ROOT, inTypeName_, "");
+	AddUserFilter(pTreeCtrl, TVI_ROOT, UserFilter_);
 
 	ExpandTreeItem(pTreeCtrl, TVI_ROOT);
 	
 	return TRUE;  // return TRUE unless you set the focus to a control
 				  // EXCEPTION: OCX Property Pages should return FALSE
+}
+
+// "a:int" --> a
+CString GetName(CString const& NameAndType)
+{
+	int p = NameAndType.Find(":");
+	if (p < 0) return NameAndType;
+	return NameAndType.Mid(0, p);
+}
+
+void CMemberBrowserDlg::OnBnClickedOk()
+{
+	// TODO: 在此添加控件通知处理程序代码
+	CTreeCtrl* pTreeCtrl = (CTreeCtrl*)GetDlgItem(IDC_TREE1);
+	HTREEITEM hSelectedItem = pTreeCtrl->GetSelectedItem();
+	CString ret;
+	for(HTREEITEM pThisItem = hSelectedItem; pThisItem; pThisItem = pTreeCtrl->GetParentItem(pThisItem))
+	{
+		CString text = pTreeCtrl->GetItemText(pThisItem);
+		CString name = GetName(text);
+
+		if (ret.IsEmpty())
+			ret = name;
+		else
+			ret = name + "." + ret;
+	}
+	
+	retIsInput_ = ret.Find("Input.") == 0;
+	if (retIsInput_)
+	{
+		retPath_ = ret.Mid(strlen("Input."));
+	}
+	else
+	{
+		ASSERT(ret.Find("Output.") == 0);
+		retPath_ = ret.Mid(strlen("Output."));
+	}
+
+	CDialogEx::OnOK();
 }

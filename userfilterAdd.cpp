@@ -10,9 +10,10 @@ public:
 	virtual void Define() override
 	{
 		SetName("Add");
-		AddInput("a", "int", "1");
+		AddInput("a", "string", "1");
 		AddInput("b", "int", "2");
 		AddOutput("sum", "int", "0");
+		AddOutput("sum_str", "string", "0");
 	}
 	virtual void Invoke() override
 	{
@@ -22,6 +23,7 @@ public:
 		char s[100];
 		sprintf_s(s, "%d", sum);
 		WriteOutput("sum", s);
+		WriteOutput("sum_str", s);
 	}
 };
 

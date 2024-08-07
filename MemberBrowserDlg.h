@@ -13,7 +13,13 @@ public:
 
 	UserFilterImpl *UserFilter_ = nullptr;
 
-	bool retIsInput_ = true;
+	enum RetType
+	{
+		NA,
+		Input,
+		Output
+	};
+	RetType retType_ = NA;
 	CString retPath_;
 
 // Dialog Data

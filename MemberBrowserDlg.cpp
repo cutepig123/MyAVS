@@ -126,9 +126,12 @@ void CMemberBrowserDlg::OnSelchangedTree1(NMHDR *pNMHDR, LRESULT *pResult)
 	*pResult = 0;
 
 	GetSelectedPath();
-	std::string sValue = retIsInput_?
-		UserFilter_->ins_.Read(retPath_)
-		:UserFilter_->outs_.Read(retPath_);
+	std::string sValue;
+	
+	if (retType_ == CMemberBrowserDlg::Input)
+		UserFilter_->ins_.Read(retPath_);
+	else if (retType_ == CMemberBrowserDlg::Output)
+		UserFilter_->outs_.Read(retPath_);
 	SetDlgItemText(IDC_EDIT1, sValue.c_str());
 }
 
@@ -149,13 +152,14 @@ void CMemberBrowserDlg::GetSelectedPath()
 			ret = name + "." + ret;
 	}
 
-	retIsInput_ = ret.Find("Input.") == 0;
-	if (retIsInput_)
+	if(ret.Find("Input.") == 0)
 	{
+		retType_ = CMemberBrowserDlg::Input;
 		retPath_ = ret.Mid(strlen("Input."));
 	}
 	else if (ret.Find("Output.") == 0)
 	{
+		retType_ = CMemberBrowserDlg::Output;
 		retPath_ = ret.Mid(strlen("Output."));
 	}
 }
@@ -166,9 +170,9 @@ void CMemberBrowserDlg::OnBnClickedButtonUpdate()
 	// TODO: Add your control notification handler code here
 	CString sValue;
 	GetDlgItemText(IDC_EDIT1, sValue);
-	if (retIsInput_)
+	if (retType_ = CMemberBrowserDlg::Input)
 		UserFilter_->ins_.Write(retPath_, (const char*)sValue);
-	else
+	else if (retType_ = CMemberBrowserDlg::Output)
 		UserFilter_->outs_.Write(retPath_, (const char*)sValue);
 	
 }

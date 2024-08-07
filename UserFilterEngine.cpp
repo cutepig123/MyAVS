@@ -801,6 +801,46 @@ struct Test
 		}
 	}
 
+	void ShowToolTip(MyToolTip& tooltip, CWnd*pWnd, CPoint pt)
+	{
+		HitTestResult hitTest = HitTest(pt);
+		CString text;
+
+		switch (hitTest.type_)
+		{
+		case HitTestResult::Type::Block:
+		{
+			break;
+		}
+		case HitTestResult::Type::OutPort:
+		{
+			auto const& b = blocks[hitTest.blockName_];
+			const auto ps = b.getRawObj().outs_.GetByName(hitTest.portIndx_);
+			text = ps.c_str();
+			break;
+		}
+		case HitTestResult::Type::InPort:
+		{
+			auto const& b = blocks[hitTest.blockName_];
+			const auto ps = b.getRawObj().ins_.GetByName(hitTest.portIndx_);
+			text = ps.c_str();
+			break;
+		}
+		default:
+			tooltip.Hide();
+			break;
+		}
+
+		if (!text.IsEmpty())
+		{
+			CPoint ptScreen = pt;
+			pWnd->ClientToScreen(&ptScreen);
+			ptScreen.x -= 15;
+			ptScreen.y -= 45;
+			tooltip.Show(text, ptScreen);
+		}
+	}	
+	
 	void ContextMenu(CWnd* pWnd, CPoint const& point)
 	{
 		CPoint ptScreen = point;
@@ -822,13 +862,14 @@ struct Test
 					dlg.UserFilter_ = &blocks.at(hitTest.blockName_).getRawObj();
 					if (IDOK == dlg.DoModal())
 					{
-						if (dlg.retIsInput_)
+						switch (dlg.retType_)
 						{
-							blocks.at(hitTest.blockName_).AddInput(dlg.retPath_);
-						}
-						else
-						{
-							blocks.at(hitTest.blockName_).AddOutput(dlg.retPath_);
+							case CMemberBrowserDlg::Input:
+								blocks.at(hitTest.blockName_).AddInput(dlg.retPath_);
+								break;
+							case CMemberBrowserDlg::Output:
+								blocks.at(hitTest.blockName_).AddOutput(dlg.retPath_);
+								break;
 						}
 					}
 				break;
@@ -911,4 +952,9 @@ void Eng_AddBlock(const char* name)
 void Eng_ContextMenu(CWnd* pWnd, CPoint const& point)
 {
 	g_test->ContextMenu(pWnd, point);
+}
+
+void Eng_OnMouseMove(CWnd* pWnd, CPoint point)
+{
+	g_test->ShowToolTip(g_MyToolTip, pWnd, point);
 }

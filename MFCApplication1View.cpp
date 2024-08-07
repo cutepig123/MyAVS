@@ -157,7 +157,7 @@ void CMFCApplication1View::OnMouseMove(UINT nFlags, CPoint point)
 {
 	// TODO: 在此添加消息处理程序代码和/或调用默认值
 	//g_test.ShowToolTip(g_MyToolTip, this, point);
-
+	Eng_OnMouseMove(this, point);
 	CView::OnMouseMove(nFlags, point);
 }
 

@@ -98,6 +98,9 @@
     <ClCompile Include="TypeComposition.cpp">
       <Filter>源文件</Filter>
     </ClCompile>
+    <ClCompile Include="TestJson.cpp">
+      <Filter>源文件</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <ResourceCompile Include="MFCApplication1.rc">

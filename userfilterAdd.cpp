@@ -1,5 +1,5 @@
 #pragma once
-
+#include "TypeComposition.h"
 #include "userfilter.h"
 #include <string>
 
@@ -10,20 +10,31 @@ public:
 	virtual void Define() override
 	{
 		SetName("Add");
-		AddInput("a", "string", "1");
-		AddInput("b", "int", "2");
-		AddOutput("sum", "int", "0");
-		AddOutput("sum_str", "string", "0");
+		AddInput("a", "Window", "");
+		AddInput("b", "string", "");
+		AddOutput("length", "int", "");
+		AddOutput("sum_str", "string", "");
 	}
+	
 	virtual void Invoke() override
 	{
-		auto a = atoi(ReadInput("a").c_str());
-		auto b= atoi(ReadInput("b").c_str());
-		auto sum = a + b;
-		char s[100];
-		sprintf_s(s, "%d", sum);
-		WriteOutput("sum", s);
-		WriteOutput("sum_str", s);
+		// TODO: Ugly Code
+		auto a = ReadInput("a");
+		auto b= ReadInput("b");
+		
+		{
+			auto sum = strlen(a.c_str()) + strlen(b.c_str());
+			char sum_str[100];
+			sprintf_s(sum_str, "%d", sum);
+			WriteOutput2("length", NewIntObject(sum_str));
+		}
+
+		{
+			std::string sum_str;
+			sum_str += a;
+			sum_str += b;
+			WriteOutput2("sum_str", NewStringObject(sum_str.c_str()));
+		}
 	}
 };
 

@@ -223,11 +223,11 @@ public:
 		for (const auto&i: ui_ins_)
 		{
 			const auto rc = GetInPortRect(i);
-			const auto& port = getRawObj().ins_.GetByName(i);
-			CPen pen(PS_SOLID, 1, GetColorByType(port.type.c_str()));
+			const auto port = getRawObj().ins_.GetObjByName(i);
+			CPen pen(PS_SOLID, 1, GetColorByType(port->type.c_str()));
 			auto old = pDC->SelectObject(pen);
 			pDC->Rectangle(rc);
-			pDC->TextOutA(rc.right, rc.top, (port.name + ":" + port.value + ":" + port.type).c_str());
+			pDC->TextOutA(rc.right, rc.top, (i + ":" /*+ port.value + ":"*/ + port->type.c_str()));
 			pDC->SelectObject(old);
 		}
 
@@ -235,11 +235,11 @@ public:
 		for (const auto& i : ui_outs_)
 		{
 			const auto& rc = GetOutPortRect(i);
-			const auto& port = getRawObj().outs_.GetByName(i);
-			CPen pen(PS_SOLID, 1, GetColorByType(port.type.c_str()));
+			const auto port = getRawObj().outs_.GetObjByName(i);
+			CPen pen(PS_SOLID, 1, GetColorByType(port->type.c_str()));
 			auto old = pDC->SelectObject(pen);
 			pDC->Rectangle(rc);
-			pDC->TextOutA(rc.right, rc.top, (port.name + ":" + port.value + ":" + port.type).c_str());
+			pDC->TextOutA(rc.right, rc.top, (i + ":" /*+ port.value + ":"*/ + port->type.c_str()));
 			pDC->SelectObject(old);
 		}
 	}
@@ -261,9 +261,9 @@ public:
 		
 	}
 
-	const UserFilterImpl::Port& GetInPort(const char* i) const
+	std::shared_ptr<MyObject> GetInPort(const char* i) const
 	{
-		return getRawObj().ins_.GetByName(i);
+		return getRawObj().ins_.GetObjByName(i);
 	}
 
 	UserFilterImpl& getRawObj()

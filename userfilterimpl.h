@@ -1,9 +1,11 @@
 #pragma once
 #include  "userfilter.h"
+#include "TypeComposition.h"
 #include <string>
 #include <vector>
 #include <assert.h>
 #include <algorithm>
+#include <memory>
 
 class UserFilterImpl
 {
@@ -13,8 +15,7 @@ public:
 	struct Port
 	{
 		std::string name;
-		std::string type;
-		std::string value;
+		std::shared_ptr<MyObject> value;
 	};
 
 	struct Ports
@@ -23,43 +24,66 @@ public:
 	
 		std::string GetTypeByName(const char* name) const
 		{
-			auto it = std::find_if(ports_.begin(), ports_.end(), [name](Port const& p) {return p.name == name; });
-			assert(it != ports_.end());
-			return it->type;
+			return GetObjByName(name)->type;
 		}
 
-		const Port& GetByName(const char* name) const
+		std::string GetByName(const char* name) const
 		{
-			auto it = std::find_if(ports_.begin(), ports_.end(), [name](Port const& p) {return p.name == name; });
-			assert(it != ports_.end());
-			return *it;
+			return ObjectToJSONString(GetObjByName(name));
 		}
 
-		size_t GetIndex(const char* name) const
+		std::shared_ptr<MyObject> GetObjByName(const char* name) const
 		{
-			auto it = std::find_if(ports_.begin(), ports_.end(), [name](Port const& p) {return p.name == name; });
-			assert(it != ports_.end());
-			return it - ports_.begin();
+			const char* pDot = strstr(name, ".");
+
+			if (pDot)
+			{
+				std::string subName(name, pDot);
+				auto it = std::find_if(ports_.begin(), ports_.end(), [subName](Port const& p) {return p.name == subName; });
+				assert(it != ports_.end());
+				return it->value->GetByName(pDot + 1);
+			}
+			else
+			{
+				auto it = std::find_if(ports_.begin(), ports_.end(), [name](Port const& p) {return p.name == name; });
+				assert(it != ports_.end());
+				return it->value;
+			}
 		}
 
 		void Add(const char* name, const char* type, const std::string& default_value)
 		{
+			AddObj(name, type, default_value.empty()? NewObject(type):ObjectFromJSONString(default_value.c_str()));
+		}
+
+		void AddObj(const char* name, const char* type, const std::shared_ptr<MyObject>& default_value)
+		{
 			assert(std::find_if(ports_.begin(), ports_.end(), [name](Port const& p) {return p.name == name; }) == ports_.end());
-			ports_.push_back(Port{ name, type, default_value });
+			if (default_value)
+			{
+				assert(type == default_value->type);
+			}
+			ports_.push_back(Port{ name, default_value ? default_value:NewObject(type) });
 		}
 
 		std::string Read(const char* name) const
 		{
-			auto it = std::find_if(ports_.begin(), ports_.end(), [name](Port const& p) {return p.name == name; });
-			assert(it != ports_.end());
-			return it->value;
+			return ObjectToJSONString(ReadObj(name));
+		}
+		std::shared_ptr<MyObject> ReadObj(const char* name) const
+		{
+			return GetObjByName(name);
 		}
 
 		void Write(const char* name, std::string const& t)
 		{
-			auto it = std::find_if(ports_.begin(), ports_.end(), [name](Port const& p) {return p.name == name; });
-			assert(it != ports_.end());
-			it->value = t;
+			WriteObj(name, ObjectFromJSONString(t.c_str()));
+		}
+		void WriteObj(const char* name, std::shared_ptr<MyObject> const& t)
+		{
+			auto value = GetObjByName(name);
+			assert(value->type == t->type);
+			*value = *t;
 		}
 	};
 

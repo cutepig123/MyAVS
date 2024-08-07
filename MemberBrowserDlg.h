@@ -11,7 +11,7 @@ public:
 	CMemberBrowserDlg(CWnd* pParent = NULL);   // standard constructor
 	virtual ~CMemberBrowserDlg();
 
-	UserFilterImpl const *UserFilter_ = nullptr;
+	UserFilterImpl *UserFilter_ = nullptr;
 
 	bool retIsInput_ = true;
 	CString retPath_;
@@ -28,4 +28,7 @@ protected:
 public:
 	virtual BOOL OnInitDialog();
 	afx_msg void OnBnClickedOk();
+	afx_msg void OnSelchangedTree1(NMHDR *pNMHDR, LRESULT *pResult);
+	void GetSelectedPath();
+	afx_msg void OnBnClickedButtonUpdate();
 };

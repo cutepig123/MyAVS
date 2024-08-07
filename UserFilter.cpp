@@ -51,6 +51,16 @@ void UserFilter::WriteOutput(const char* name, std::string const& t)
 	impl_->WriteOutput(name, t);
 }
 
+std::shared_ptr<MyObject> UserFilter::ReadInput2(const char* name)
+{
+	return impl_->ins_.ReadObj(name);
+}
+
+void UserFilter::WriteOutput2(const char* name, std::shared_ptr<MyObject> const& t)
+{
+	impl_->outs_.WriteObj(name, t);
+}
+
 int RegisterFilter(std::function<UserFilter* ()> const& create)
 {
 	std::unique_ptr<UserFilter> t(create());

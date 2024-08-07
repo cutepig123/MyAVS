@@ -1,4 +1,5 @@
 #pragma once
+#include "TypeComposition.h"
 #include <functional>
 #include <memory>
 #include <string>
@@ -26,8 +27,10 @@ protected:
 	void AddOutput(const char* name, const char* type, const std::string& default_value);
 
 	std::string ReadInput(const char* name);
+	std::shared_ptr<MyObject> ReadInput2(const char* name);
 
 	void WriteOutput(const char* name, std::string const& t);
+	void WriteOutput2(const char* name, std::shared_ptr<MyObject> const& t);
 private:
 
 };

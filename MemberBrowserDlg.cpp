@@ -6,7 +6,7 @@
 #include "MemberBrowserDlg.h"
 #include "afxdialogex.h"
 #include "TypeComposition.h"
-
+#include "userfilterimpl.h"
 // CMemberBrowserDlg dialog
 
 IMPLEMENT_DYNAMIC(CMemberBrowserDlg, CDialogEx)
@@ -29,6 +29,8 @@ void CMemberBrowserDlg::DoDataExchange(CDataExchange* pDX)
 
 BEGIN_MESSAGE_MAP(CMemberBrowserDlg, CDialogEx)
 	ON_BN_CLICKED(IDOK, &CMemberBrowserDlg::OnBnClickedOk)
+	ON_NOTIFY(TVN_SELCHANGED, IDC_TREE1, &CMemberBrowserDlg::OnSelchangedTree1)
+	ON_BN_CLICKED(ID_BUTTON_UPDATE, &CMemberBrowserDlg::OnBnClickedButtonUpdate)
 END_MESSAGE_MAP()
 
 
@@ -63,13 +65,13 @@ void AddUserFilter(CTreeCtrl* pTreeCtrl, HTREEITEM parent, UserFilterImpl const*
 	auto rootHandle = AddTreeItem(pTreeCtrl, parent, "Input");
 	for (const auto& port : UserFilter_->ins_.ports_)
 	{
-		AddMeAndAllChildRecursive(pTreeCtrl, rootHandle, port.type.c_str(), port.name.c_str());
+		AddMeAndAllChildRecursive(pTreeCtrl, rootHandle, port.value->type.c_str(), port.name.c_str());
 	}
 
 	rootHandle = AddTreeItem(pTreeCtrl, parent, "Output");
 	for (const auto& port : UserFilter_->outs_.ports_)
 	{
-		AddMeAndAllChildRecursive(pTreeCtrl, rootHandle, port.type.c_str(), port.name.c_str());
+		AddMeAndAllChildRecursive(pTreeCtrl, rootHandle, port.value->type.c_str(), port.name.c_str());
 	}
 }
 
@@ -112,10 +114,31 @@ CString GetName(CString const& NameAndType)
 void CMemberBrowserDlg::OnBnClickedOk()
 {
 	// TODO: 在此添加控件通知处理程序代码
+	GetSelectedPath();
+	CDialogEx::OnOK();
+}
+
+
+void CMemberBrowserDlg::OnSelchangedTree1(NMHDR *pNMHDR, LRESULT *pResult)
+{
+	LPNMTREEVIEW pNMTreeView = reinterpret_cast<LPNMTREEVIEW>(pNMHDR);
+	// TODO: Add your control notification handler code here
+	*pResult = 0;
+
+	GetSelectedPath();
+	std::string sValue = retIsInput_?
+		UserFilter_->ins_.Read(retPath_)
+		:UserFilter_->outs_.Read(retPath_);
+	SetDlgItemText(IDC_EDIT1, sValue.c_str());
+}
+
+
+void CMemberBrowserDlg::GetSelectedPath()
+{
 	CTreeCtrl* pTreeCtrl = (CTreeCtrl*)GetDlgItem(IDC_TREE1);
 	HTREEITEM hSelectedItem = pTreeCtrl->GetSelectedItem();
 	CString ret;
-	for(HTREEITEM pThisItem = hSelectedItem; pThisItem; pThisItem = pTreeCtrl->GetParentItem(pThisItem))
+	for (HTREEITEM pThisItem = hSelectedItem; pThisItem; pThisItem = pTreeCtrl->GetParentItem(pThisItem))
 	{
 		CString text = pTreeCtrl->GetItemText(pThisItem);
 		CString name = GetName(text);
@@ -125,17 +148,27 @@ void CMemberBrowserDlg::OnBnClickedOk()
 		else
 			ret = name + "." + ret;
 	}
-	
+
 	retIsInput_ = ret.Find("Input.") == 0;
 	if (retIsInput_)
 	{
 		retPath_ = ret.Mid(strlen("Input."));
 	}
-	else
+	else if (ret.Find("Output.") == 0)
 	{
-		ASSERT(ret.Find("Output.") == 0);
 		retPath_ = ret.Mid(strlen("Output."));
 	}
+}
 
-	CDialogEx::OnOK();
+
+void CMemberBrowserDlg::OnBnClickedButtonUpdate()
+{
+	// TODO: Add your control notification handler code here
+	CString sValue;
+	GetDlgItemText(IDC_EDIT1, sValue);
+	if (retIsInput_)
+		UserFilter_->ins_.Write(retPath_, (const char*)sValue);
+	else
+		UserFilter_->outs_.Write(retPath_, (const char*)sValue);
+	
 }

@@ -129,9 +129,9 @@ void CMemberBrowserDlg::OnSelchangedTree1(NMHDR *pNMHDR, LRESULT *pResult)
 	std::string sValue;
 	
 	if (retType_ == CMemberBrowserDlg::Input)
-		UserFilter_->ins_.Read(retPath_);
+		sValue = UserFilter_->ins_.Read(retPath_);
 	else if (retType_ == CMemberBrowserDlg::Output)
-		UserFilter_->outs_.Read(retPath_);
+		sValue = UserFilter_->outs_.Read(retPath_);
 	SetDlgItemText(IDC_EDIT1, sValue.c_str());
 }
 
